@@ -1,0 +1,4 @@
+mujoco
+gymnasium==1.3.0
+mujoco-viewer
+numpy
