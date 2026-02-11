@@ -15,6 +15,11 @@ class Simulator:
         self.data = data
         self.failures = failures or []
         self.time = 0.0
+        
+        # set our drone to hover initially; this should be parameterized out later
+        # when we get a proper "scenario" setup design
+        hover_thrust = self.model.body_mass.sum() * 9.81 / 4
+        self.data.ctrl[:] = hover_thrust
 
     def hover_pd(self):
         """
@@ -39,8 +44,6 @@ class Simulator:
         """
         for f in self.failures:
             f.apply(self, self.time)
-        hover_thrust = self.model.body_mass.sum() * 9.81 / 4
-        self.data.ctrl[:] = hover_thrust
         self.hover_pd()
         mujoco.mj_step(self.model, self.data)
         self.time += dt
