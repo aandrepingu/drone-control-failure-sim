@@ -10,7 +10,7 @@ model, data = load_model()
 
 sim = Simulator(model, data, )
 viewer = launch_viewer(model, data)
-
 while viewer.is_running():
     sim.step()
+    viewer.sync()
     time.sleep(0.002)
