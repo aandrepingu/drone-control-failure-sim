@@ -16,6 +16,21 @@ class Simulator:
         self.failures = failures or []
         self.time = 0.0
 
+    def hover_pd(self):
+        """
+        Basic PD controller. 
+        Note that ctrl is of the form [thrust1, thrust2, thrust3, thrust4, roll, pitch, yaw]
+
+        where ctrl[0:4] are thrust sources on each propeller and ctrl[4:7] are actuators
+        """
+        wx, wy, wz = self.data.qvel[3:6]
+        kp = 0.5
+        kd = 0.05
+
+        self.data.ctrl[4] = -kp * wx - kd * wx
+        self.data.ctrl[5] = -kp * wy - kd * wy
+        self.data.ctrl[6] = -kp * wz - kd * wz
+
     def step(self, dt=0.002):
         """
         Apply failures and step the simulation ahead.
@@ -24,6 +39,8 @@ class Simulator:
         """
         for f in self.failures:
             f.apply(self, self.time)
-
+        hover_thrust = self.model.body_mass.sum() * 9.81 / 4
+        self.data.ctrl[:] = hover_thrust
+        self.hover_pd()
         mujoco.mj_step(self.model, self.data)
         self.time += dt
