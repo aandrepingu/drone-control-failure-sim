@@ -1,5 +1,5 @@
 import mujoco
-
+import numpy as np
 class Simulator:
     """
     Class which holds the simulated model, data, and failures we want to simulate,
@@ -20,6 +20,29 @@ class Simulator:
         # when we get a proper "scenario" setup design
         hover_thrust = self.model.body_mass.sum() * 9.81 / 4
         self.data.ctrl[:] = hover_thrust
+
+    def mix(self, thrust_d, roll_d, pitch_d, yaw_d):
+        """
+        Quadcopter motor mixer that converts desired thrust, pitch,roll,and yaw
+        to individual motor commands. This is the main mechanism by which a controller
+        will affect the quadcopter's rotors. 
+        
+        :param thrust_d: Desired thrust
+        :param roll_d: Desired roll
+        :param pitch_d: Desired pitch
+        :param yaw_d: Desired yaw
+        """
+        motor1_pwm = thrust_d - roll_d + pitch_d + yaw_d
+        motor2_pwm = thrust_d + roll_d - pitch_d + yaw_d
+        motor3_pwm = thrust_d + roll_d + pitch_d - yaw_d
+        motor4_pwm = thrust_d - roll_d - pitch_d - yaw_d
+        res= np.array([motor1_pwm,motor2_pwm,motor3_pwm,motor4_pwm])
+
+        # clip motor forces to be in the range [0,7.0]. This can be moved outside the mix function if needed
+        # Note that this is hardcoded to match the ctrlrange of our model's actuators.
+        # This should be changed if a different model is used; TODO to parameterize the ctrlrange somehow
+        np.clip(res, 0, 7.0)
+        return res
 
     def hover_pd(self):
         """
