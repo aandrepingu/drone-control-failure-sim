@@ -18,12 +18,12 @@ class Simulator:
         self.failures = failures or []
         self.time = 0.0
         self.config = sim_config
-        self.apply_config(self.sim_config)
+        self.apply_config(self.config)
         
         # # set our drone to hover initially; this should be parameterized out later
         # # when we get a proper "scenario" setup design
-        # hover_thrust = self.model.body_mass.sum() * 9.81 / 4
-        # self.data.ctrl[:] = hover_thrust
+        hover_thrust = self.model.body_mass.sum() * 9.81 / 4
+        self.data.ctrl[:] = hover_thrust
 
     def apply_config(self, sim_config):
         """
