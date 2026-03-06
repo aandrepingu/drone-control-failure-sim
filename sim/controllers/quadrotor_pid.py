@@ -5,12 +5,12 @@ from .pid import PID
 
 class QuadrotorPIDController(BaseController):
 
-    def __init__(self, params: dict, dt: float):
+    def __init__(self, mass, dt: float):
         
         self.dt = dt
-        self.m = params["mass"]
-        self.L = params["arm_length"]
-        self.k_yaw = params["yaw_coeff"]
+        self.m = mass
+        # self.L = params["arm_length"]
+        # self.k_yaw = params["yaw_coeff"]
         self.g = 9.81
 
         # initialize individual PIDs for altitude, roll, pitch, yaw
