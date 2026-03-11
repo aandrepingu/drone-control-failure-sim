@@ -53,7 +53,8 @@ class Simulator:
         pos = self.data.qpos[0:3]
 
         quat = self.data.qpos[3:7]
-        r = Rotation.from_quat(quat)
+        quat_xyzw = np.array([quat[1],quat[2],quat[3],quat[0]])
+        r = Rotation.from_quat(quat_xyzw, scalar_first=False)
         euler = r.as_euler("xyz")
 
         vel = self.data.qvel[0:3]
@@ -91,8 +92,8 @@ class Simulator:
         # clip motor forces to be in the range [0,7.0]. This can be moved outside the mix function if needed
         # Note that this is hardcoded to match the ctrlrange of our model's actuators.
         # This should be changed if a different model is used; TODO to parameterize the ctrlrange somehow
-        np.clip(res, 0, 7.0)
-        return res
+        return np.clip(res, 0, 7.0)
+       
 
 
     def step(self, dt=0.002):
