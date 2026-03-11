@@ -14,10 +14,10 @@ class QuadrotorPIDController(BaseController):
         self.g = 9.81
 
         # initialize individual PIDs for altitude, roll, pitch, yaw
-        self.alt_pid = PID(6.0, 2.0, 3.0, dt)
-        self.roll_pid = PID(4.0, 0.0, 1.5, dt)
-        self.pitch_pid = PID(4.0, 0.0, 1.5, dt)
-        self.yaw_pid = PID(1.0, 0.0, 0.3, dt)
+        self.alt_pid = PID(6.0, 2.0, 3.0, dt, integral_limits=(-2,2), is_angle=False)
+        self.roll_pid = PID(4.0, 0.0, 1.5, dt, integral_limits=(-2,2), is_angle=True)
+        self.pitch_pid = PID(4.0, 0.0, 1.5, dt, integral_limits=(-2,2), is_angle=True)
+        self.yaw_pid = PID(1.0, 0.0, 0.3, dt, integral_limits=(-2,2), is_angle=True)
 
 
 

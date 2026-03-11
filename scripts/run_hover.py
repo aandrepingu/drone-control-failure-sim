@@ -3,6 +3,7 @@ from sim.model import load_model
 from sim.sim_loop import Simulator
 from sim.viewer import launch_viewer
 from sim.failures.thrust_loss import ThrustLoss
+from sim.failures.stuck_actuator import StuckActuator
 from sim.sim_config import SimConfig
 from sim.controllers.quadrotor_pid import QuadrotorPIDController
 import numpy as np
@@ -15,7 +16,11 @@ print(mass)
 # failures = [
 #     ThrustLoss(start_time=np.random.uniform(low=3,high=6),alpha=np.random.uniform(low=0,high=1),prop=np.random.choice(range(4)))
 #     for _ in range(3)]
-failures = []
+# test thrust loss failure
+failures = [
+    # ThrustLoss(start_time=3.0, alpha=0.2, prop=0)
+    # StuckActuator(start_time=3.0, index=0)
+]
 
 pos_range = np.array([-0.5, 0.5])
 vel_range = np.array([0.5, 2.0])

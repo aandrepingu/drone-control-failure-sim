@@ -12,7 +12,8 @@ class PID:
                  kd: float, 
                  dt: float, 
                  output_limits=None,
-                 integral_limits=None):
+                 integral_limits=None,
+                 is_angle:bool=False):
         self.kp=kp
         self.ki=ki
         self.kd=kd
@@ -24,12 +25,15 @@ class PID:
         # output limits and integral limits should be (low,high) tuples
         self.output_limits = output_limits
         self.integral_limits = integral_limits
+        self.is_angle = is_angle
 
     def update (self, 
                 measurement: float, 
                 target: float):
         
         error = target - measurement
+        if self.is_angle:
+            error = (error+np.pi) % (2*np.pi) - np.pi
         
         # integral
         self.integral += error * self.dt
