@@ -30,7 +30,8 @@ class PID:
 
     def update (self, 
                 measurement: float, 
-                target: float):
+                target: float,
+                derivative_override:float = None):
         
         error = target - measurement
         if self.is_angle:
@@ -44,7 +45,10 @@ class PID:
             self.integral = np.clip(self.integral, low, high)
 
         # derivative
-        derivative = (error - self.prev_error) / self.dt
+        if derivative_override is None:
+            derivative = (error - self.prev_error) / self.dt
+        else:
+            derivative = -derivative_override
 
         output = (
             self.kp * error

@@ -83,10 +83,11 @@ class Simulator:
         :param pitch_d: Desired pitch
         :param yaw_d: Desired yaw
         """
-        motor1_pwm = thrust_d - roll_d + pitch_d + yaw_d
-        motor2_pwm = thrust_d + roll_d - pitch_d + yaw_d
-        motor3_pwm = thrust_d + roll_d + pitch_d - yaw_d
-        motor4_pwm = thrust_d - roll_d - pitch_d - yaw_d
+        motor1_pwm = thrust_d + roll_d - pitch_d + yaw_d
+        motor2_pwm = thrust_d - roll_d - pitch_d - yaw_d
+        motor3_pwm =  thrust_d - roll_d + pitch_d + yaw_d
+        motor4_pwm = thrust_d + roll_d + pitch_d - yaw_d
+
         res= np.array([motor1_pwm,motor2_pwm,motor3_pwm,motor4_pwm])
 
         # clip motor forces to be in the range [0,7.0]. This can be moved outside the mix function if needed

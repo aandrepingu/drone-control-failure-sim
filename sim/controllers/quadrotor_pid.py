@@ -14,10 +14,10 @@ class QuadrotorPIDController(BaseController):
         self.g = 9.81
 
         # initialize individual PIDs for altitude, roll, pitch, yaw
-        self.alt_pid = PID(6.0, 2.0, 3.0, dt,integral_limits=(-2,2),is_angle=False)
-        self.roll_pid = PID(4.0, 0.0, 1.5, dt,integral_limits=(-2,2),is_angle=True)
-        self.pitch_pid = PID(4.0, 0.0, 1.5, dt,integral_limits=(-2,2),is_angle=True)
-        self.yaw_pid = PID(1.0, 0.0, 0.3, dt,integral_limits=(-2,2),is_angle=True)
+        self.alt_pid = PID(6.0, 2.0, 3.0, dt,integral_limits=(-2,2),output_limits=(-2,2),is_angle=False)
+        self.roll_pid = PID(4.0, 0.0, 1.5, dt,integral_limits=(-2,2),output_limits=(-2,2),is_angle=True)
+        self.pitch_pid = PID(4.0, 0.0, 1.5, dt,integral_limits=(-2,2),output_limits=(-2,2),is_angle=True)
+        self.yaw_pid = PID(1.0, 0.0, 0.3, dt,integral_limits=(-2,2),output_limits=(-2,2),is_angle=True)
 
 
 
@@ -46,15 +46,15 @@ class QuadrotorPIDController(BaseController):
 
         z = state["pos"][2]
         roll, pitch, yaw = state["euler"]
-
+        roll_rate,pitch_rate,yaw_rate=state['ang_vel']
         # get output from altitude pid
         thrust_correction = self.alt_pid.update(z,target["z"])
         thrust = self.m * self.g / 4 + thrust_correction
 
-        # get output from attitude pids 
-        roll_cmd = self.roll_pid.update( measurement=roll, target=target["roll"])
-        pitch_cmd= self.pitch_pid.update(measurement=pitch,target=target["pitch"])
-        yaw_cmd = self.yaw_pid.update( measurement=yaw,target=target["yaw"])
+        # get output from attitude pids, including angular velocities for derivative
+        roll_cmd = self.roll_pid.update( measurement=roll, target=target["roll"],derivative_override=roll_rate)
+        pitch_cmd= self.pitch_pid.update(measurement=pitch,target=target["pitch"],derivative_override=pitch_rate)
+        yaw_cmd = self.yaw_pid.update( measurement=yaw,target=target["yaw"],derivative_override=yaw_rate)
 
         # apply motor mixing to these outputs
         return thrust, roll_cmd,pitch_cmd,yaw_cmd
