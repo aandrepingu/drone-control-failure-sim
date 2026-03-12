@@ -49,7 +49,8 @@ class QuadrotorPIDController(BaseController):
 
         # get output from altitude pid
         thrust_correction = self.alt_pid.update(z,target["z"])
-        thrust = self.m * self.g / 4 + thrust_correction
+        # thrust = self.m * self.g / 4 + thrust_correction
+        total_thrust = self.m * self.g + thrust_correction
 
         # get output from attitude pids 
         roll_cmd = self.roll_pid.update( roll, target["roll"])
@@ -57,4 +58,4 @@ class QuadrotorPIDController(BaseController):
         yaw_cmd = self.yaw_pid.update( yaw,target["yaw"])
 
         # apply motor mixing to these outputs
-        return thrust, roll_cmd,pitch_cmd,yaw_cmd
+        return total_thrust, roll_cmd,pitch_cmd,yaw_cmd
