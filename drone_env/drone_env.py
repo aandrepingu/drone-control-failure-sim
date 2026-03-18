@@ -38,6 +38,7 @@ class DroneEnv(gym.Env):
         self.yaw_range = np.array(yaw_range, dtype=np.float64)
 
         self.target = target or {"z": 1.0, "roll": 0.0, "pitch": 0.0, "yaw": 0.0}
+        self.target_pos = np.array([0.0, 0.0, 1.0], dtype=np.float64)
         self.failures_template = failures
         self.failure_factory = failure_factory
 
@@ -76,6 +77,8 @@ class DroneEnv(gym.Env):
         else:
             self.sim.failures = []
 
+        self.target_pos = np.random.uniform([-0.5, -0.5, 0.5], [0.5, 0.5, 1.5])
+
         return self._get_obs(), {}
 
     def step(self, action):
@@ -112,6 +115,7 @@ class DroneEnv(gym.Env):
             [state["pos"], state["vel"], accel, state["euler"], state["ang_vel"]]
         ).astype(np.float32)
 
+    """
     def _compute_reward(self, action):
         state = self.sim.get_state()
         pos_target = np.array([0.0, 0.0, self.target["z"]], dtype=np.float64)
@@ -129,6 +133,23 @@ class DroneEnv(gym.Env):
         reward -= 0.05 * float(np.dot(ang_vel, ang_vel))
         reward -= 0.001 * float(np.dot(action, action))
         return reward
+    """
+
+    def _compute_reward(self, action):
+        state = self.sim.get_state()
+
+        pos = state["pos"]
+        goal = np.array(self.target_pos, dtype=np.float64)
+        pos_err = pos - goal
+
+        theta = state["euler"]
+        omega = state["ang_vel"]
+
+        C_theta = 0.05
+        C_omega = 0.02
+
+        r = 1.0 - np.linalg.norm(pos_err) - C_theta * np.linalg.norm(theta) - C_omega * np.linalg.norm(omega)
+        return max(0.0, r)
 
     def _check_terminated(self):
         state = self.sim.get_state()
