@@ -50,13 +50,14 @@ class DroneEnv(gym.Env):
 
         # Action: normalized motor thrusts in [0, 1]
         self.action_space = gym.spaces.Box(low=0.0, high=1.0, shape=(4,), dtype=np.float32)
-        # Observation: pos(3) + vel(3) + euler(3) + ang_vel(3) + target(4)
+        # Observation: pos(3) + vel(3) + accel(3) + euler(3) + ang_vel(3)
         self.observation_space = gym.spaces.Box(
-            low=-np.inf, high=np.inf, shape=(16,), dtype=np.float32
+            low=-np.inf, high=np.inf, shape=(15,), dtype=np.float32
         )
 
         self.viewer = None
         self.steps = 0
+        self._prev_vel = np.zeros(3, dtype=np.float64)
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -66,6 +67,7 @@ class DroneEnv(gym.Env):
         self.sim.apply_config(cfg)
         self.sim.target = dict(self.target)
         self.steps = 0
+        self._prev_vel = self.sim.get_state()["vel"].copy()
 
         if self.failure_factory is not None:
             self.sim.failures = self.failure_factory()
@@ -104,12 +106,10 @@ class DroneEnv(gym.Env):
 
     def _get_obs(self):
         state = self.sim.get_state()
-        target = np.array(
-            [self.target["z"], self.target["roll"], self.target["pitch"], self.target["yaw"]],
-            dtype=np.float64,
-        )
+        accel = (state["vel"] - self._prev_vel) / self.dt
+        self._prev_vel = state["vel"].copy()
         return np.concatenate(
-            [state["pos"], state["vel"], state["euler"], state["ang_vel"], target]
+            [state["pos"], state["vel"], accel, state["euler"], state["ang_vel"]]
         ).astype(np.float32)
 
     def _compute_reward(self, action):
