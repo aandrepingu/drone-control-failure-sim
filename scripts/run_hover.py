@@ -1,4 +1,3 @@
-
 from sim.model import load_model
 from sim.sim_loop import Simulator
 from sim.viewer import launch_viewer
