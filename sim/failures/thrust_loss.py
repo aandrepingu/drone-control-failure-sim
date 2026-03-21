@@ -25,5 +25,4 @@ class ThrustLoss(Failure):
         if self.done or t < self.start_time:
             return
         sim.data.ctrl[self.prop] *= self.alpha
-        self.done = True
-        self.active = False
+        self.active = True

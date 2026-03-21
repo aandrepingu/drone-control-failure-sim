@@ -25,7 +25,7 @@ class Simulator:
         self.prev_vel = np.zeros(3)
 
         self.target = {
-            'z' : sim_config.position[2],
+            'pos' : sim_config.position,
             "roll": 0.0,
             "pitch": 0.0,
             "yaw": 0.0
@@ -50,7 +50,6 @@ class Simulator:
         """
         Extract drone state from mujoco.
         """
-
         pos = self.data.qpos[0:3]
 
         quat = self.data.qpos[3:7]
@@ -63,7 +62,7 @@ class Simulator:
 
         acc = ( vel - self.prev_vel ) / dt
         self.prev_vel = vel.copy()
-        
+
         """
         15-dimensional vector of state, consisting of displacement, velocity,
         angular velocity, angular displacement, and acceleration, each of which
