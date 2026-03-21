@@ -22,6 +22,7 @@ class Simulator:
         self.time = 0.0
         self.config = sim_config
         self.apply_config(self.config)
+        self.prev_vel = np.zeros(3)
 
         self.target = {
             'z' : sim_config.position[2],
@@ -45,7 +46,7 @@ class Simulator:
         self.data.qvel[3:6] = 0.0
         mujoco.mj_forward(self.model,self.data)
         
-    def get_state(self):
+    def get_state(self,dt):
         """
         Extract drone state from mujoco.
         """
@@ -60,11 +61,20 @@ class Simulator:
         vel = self.data.qvel[0:3]
         ang_vel = self.data.qvel[3:6]
 
+        acc = ( vel - self.prev_vel ) / dt
+        self.prev_vel = vel.copy()
+        
+        """
+        15-dimensional vector of state, consisting of displacement, velocity,
+        angular velocity, angular displacement, and acceleration, each of which
+        is a 3d vector.
+        """
         return {
             "pos": pos,
             "vel": vel,
             "euler": euler,
-            "ang_vel": ang_vel
+            "ang_vel": ang_vel,
+            "accel" : acc
         }
 
 
@@ -103,7 +113,7 @@ class Simulator:
         
         :param dt: time step length
         """
-        state = self.get_state()
+        state = self.get_state(dt)
         
         if self.controller is not None:
             thrust, roll, pitch, yaw = self.controller.compute_control(
