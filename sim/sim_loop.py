@@ -34,7 +34,7 @@ class Simulator:
         # set our drone to hover initially; this should be parameterized out later
         # when we get a proper "scenario" setup design
 
-    def apply_config(self, sim_config):
+    def apply_config(self, sim_config:SimConfig):
         """
         Apply a SimConfig to the current simulation.
         
@@ -44,6 +44,7 @@ class Simulator:
         self.data.qpos[3:7] = sim_config.quat
         self.data.qvel[0:3] = sim_config.velocity
         self.data.qvel[3:6] = 0.0
+        self.prev_vel = sim_config.velocity
         mujoco.mj_forward(self.model,self.data)
         
     def get_state(self,dt):
