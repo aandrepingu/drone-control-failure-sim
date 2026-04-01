@@ -27,6 +27,7 @@ class DroneEnv(gym.Env):
         target=None,
         failures=None,
         failure_factory=None,
+        warmup_steps: int = 10
     ):
         super().__init__()
         self.render_mode = render_mode
@@ -41,6 +42,7 @@ class DroneEnv(gym.Env):
         self.target_pos = np.array([0.0, 0.0, 1.0], dtype=np.float64)
         self.failures_template = failures
         self.failure_factory = failure_factory
+        self.warmup_steps = warmup_steps
 
         model, data = load_model()
         self.sim = Simulator(model, data, SimConfig.random(
@@ -77,7 +79,7 @@ class DroneEnv(gym.Env):
         else:
             self.sim.failures = []
 
-        self.target_pos = np.random.uniform([-0.5, -0.5, 0.5], [0.5, 0.5, 1.5])
+        self.target_pos = np.random.uniform([-0.5, -0.5, 0.8], [0.5, 0.5, 1.5])
 
         return self._get_obs(), {}
 
@@ -155,6 +157,10 @@ class DroneEnv(gym.Env):
         state = self.sim.get_state()
         z = state["pos"][2]
         roll, pitch, _ = state["euler"]
+
+        if self.steps < self.warmup_steps:
+            return False
+        
         if z < 0.0:
             return True
         if abs(roll) > 1.2 or abs(pitch) > 1.2:
