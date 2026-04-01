@@ -2,7 +2,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 
-from stable_baselines3 import PPO
+from stable_baselines3 import A2C
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 from drone_env.drone_env import DroneEnv
@@ -24,23 +24,14 @@ def plot_trajectories(all_trajectories):
     ax.set_title("Quadrotor Trajectories (10 Runs)")
 
     plt.show()
-    plt.savefig("trajectories_ppo.png")
+    plt.savefig("trajectories_a2c.png")
 
 def main():
     env = DummyVecEnv([make_env])
 
-    """
-    vecnorm_path = "ppo_quadrotor_vecnorm.pkl"
-    if os.path.exists(vecnorm_path):
-        env = VecNormalize.load(vecnorm_path, env)
-        env.training = False
-        env.norm_reward = False
-        env.norm_obs = True
-    """
-
     env = VecNormalize(env, norm_obs=True, norm_reward=False, clip_obs=10.0)
 
-    model = PPO.load("ppo_quadrotor", env=env)
+    model = A2C.load("a2c_quadrotor", env=env)
 
     num_episodes = 1
     max_steps = 10000

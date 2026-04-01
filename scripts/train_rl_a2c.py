@@ -1,9 +1,10 @@
 import gymnasium as gym
-from stable_baselines3 import PPO
+import numpy as np
+import matplotlib.pyplot as plt
+
+from stable_baselines3 import A2C
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, VecMonitor
 from stable_baselines3.common.callbacks import BaseCallback
-import matplotlib.pyplot as plt
-import numpy as np
 
 from drone_env.drone_env import DroneEnv
 
@@ -16,10 +17,10 @@ class RewardLoggerCallback(BaseCallback):
         infos = self.locals.get("infos", None)
         if infos is not None:
             for info in infos:
-                if "episode" in info.keys():
+                if "episode" in info:
                     self.episode_rewards.append(info["episode"]["r"])
         return True
-
+    
 def make_env():
     return DroneEnv(render_mode="human")
 
@@ -28,22 +29,21 @@ if __name__ == '__main__':
     env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.0)
     env = VecMonitor(env)
 
-    model = PPO(
+    model = A2C(
         "MlpPolicy",
         env,
         verbose=1,
-        n_steps=2048,
-        batch_size=64,
+        n_steps=5,
         gamma=0.99,
-        learning_rate=3e-4,
-        ent_coef=0.0
+        learning_rate=7e-4,
+        ent_coef=0.0,
     )
 
     reward_logger = RewardLoggerCallback()
 
-    model.learn(total_timesteps=300_000, callback=reward_logger)
-    model.save("ppo_quadrotor")
-    env.save("ppo_quadrotor_vecnorm.pkl")
+    model.learn(total_timesteps=300_000)
+    model.save("a2c_quadrotor")
+    env.save("a2c_quadrotor_vecnorm.pkl")
 
     rewards = reward_logger.episode_rewards
     plt.figure(figsize=(10, 5))
@@ -57,5 +57,5 @@ if __name__ == '__main__':
     plt.title("Episode Rewards During Training")
     plt.grid(True)
     plt.legend()
-    plt.savefig("rewards_ppo.png")
+    plt.savefig("rewards_a2c.png")
     plt.show()
