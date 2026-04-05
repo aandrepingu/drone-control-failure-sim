@@ -25,9 +25,10 @@ class DroneEnv(gym.Env):
         tilt_range=(-0.3, 0.3),
         yaw_range=(-0.3, 0.3),
         target=None,
+        goal_pos=None,
         failures=None,
         failure_factory=None,
-        warmup_steps: int = 10
+        warmup_steps: int = 50
     ):
         super().__init__()
         self.render_mode = render_mode
@@ -39,7 +40,8 @@ class DroneEnv(gym.Env):
         self.yaw_range = np.array(yaw_range, dtype=np.float64)
 
         self.target = target or {"z": 1.0, "roll": 0.0, "pitch": 0.0, "yaw": 0.0}
-        self.target_pos = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+        self.goal_pos = np.array(goal_pos if goal_pos is not None else [0.0, 0.0, 1.0], dtype=np.float64)
+        self.target_pos = self.goal_pos.copy()
         self.failures_template = failures
         self.failure_factory = failure_factory
         self.warmup_steps = warmup_steps
@@ -79,11 +81,15 @@ class DroneEnv(gym.Env):
         else:
             self.sim.failures = []
 
-        self.target_pos = np.random.uniform([-0.5, -0.5, 0.8], [0.5, 0.5, 1.5])
+        self.target_pos = self.goal_pos.copy()
 
-        return self._get_obs(), {}
+        return self._get_obs(), {"goal_pos": self.goal_pos.copy()}
 
     def step(self, action):
+        if self.steps < self.warmup_steps:
+            hover_thrust = self._compute_hover_action()
+            action = hover_thrust
+
         action = np.asarray(action, dtype=np.float64)
         action = np.clip(action, 0.0, 1.0)
         motor_cmds = self.ctrl_low + action * (self.ctrl_high - self.ctrl_low)
@@ -100,7 +106,7 @@ class DroneEnv(gym.Env):
         reward = self._compute_reward(action)
         terminated = self._check_terminated()
         truncated = self.steps >= self.max_steps
-        return obs, reward, terminated, truncated, {}
+        return obs, reward, terminated, truncated, {"goal_pos": self.goal_pos.copy()}
 
     def render(self):
         if self.render_mode != "human":
@@ -137,11 +143,12 @@ class DroneEnv(gym.Env):
         return reward
     """
 
+    """
     def _compute_reward(self, action):
         state = self.sim.get_state()
 
         pos = state["pos"]
-        goal = np.array(self.target_pos, dtype=np.float64)
+        goal = self.goal_pos
         pos_err = pos - goal
 
         theta = state["euler"]
@@ -152,20 +159,45 @@ class DroneEnv(gym.Env):
 
         r = 1.0 - np.linalg.norm(pos_err) - C_theta * np.linalg.norm(theta) - C_omega * np.linalg.norm(omega)
         return max(0.0, r)
+    """
+
+    def _compute_reward(self, action):
+        state = self.sim.get_state()
+        pos_err = state["pos"] - self.goal_pos
+        theta = state["euler"]
+        omega = state["ang_vel"]
+
+        # Always-nonzero shaped reward
+        pos_reward = np.exp(-2.0 * np.linalg.norm(pos_err))   # 0 to 1, peaks at goal
+        att_penalty = 0.1 * float(np.dot(theta, theta))
+        ang_penalty = 0.05 * float(np.dot(omega, omega))
+        action_penalty = 0.001 * float(np.dot(action, action))
+
+        # Survival bonus — reward just staying alive each timestep
+        survival = 0.1
+
+        reward = pos_reward + survival - att_penalty - ang_penalty - action_penalty
+
+        # Crash penalty
+        if self._check_terminated():
+            reward -= 1.0
+
+        return float(reward)
+
+    def _compute_hover_action(self) -> np.ndarray:
+        """Equal thrust on all motors to approximately hover."""
+        return np.full(4, 0.5, dtype=np.float64)
 
     def _check_terminated(self):
         state = self.sim.get_state()
         z = state["pos"][2]
         roll, pitch, _ = state["euler"]
-
-        if self.steps < self.warmup_steps:
-            return False
         
-        if z < 0.0:
+        if z < 0.05:
             return True
         if abs(roll) > 1.2 or abs(pitch) > 1.2:
             return True
-        if np.linalg.norm(state["pos"]) > 5.0:
+        if np.linalg.norm(state["pos"] - self.goal_pos) > 2.0:
             return True
         return False
 

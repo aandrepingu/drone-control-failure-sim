@@ -9,7 +9,8 @@ from drone_env.drone_env import DroneEnv
 
 
 def make_env():
-    return DroneEnv(render_mode="human")
+    goal_pos = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+    return DroneEnv(render_mode="human", goal_pos=goal_pos)
 
 def plot_trajectories(all_trajectories):
     fig = plt.figure()
@@ -29,16 +30,16 @@ def plot_trajectories(all_trajectories):
 def main():
     env = DummyVecEnv([make_env])
 
-    """
     vecnorm_path = "ppo_quadrotor_vecnorm.pkl"
     if os.path.exists(vecnorm_path):
         env = VecNormalize.load(vecnorm_path, env)
         env.training = False
         env.norm_reward = False
         env.norm_obs = True
-    """
-
-    env = VecNormalize(env, norm_obs=True, norm_reward=False, clip_obs=10.0)
+    
+    print("obs_rms mean:", env.obs_rms.mean)
+    print("obs_rms var:", env.obs_rms.var)
+    print("VecNorm file exists:", os.path.exists("ppo_quadrotor_vecnorm.pkl"))
 
     model = PPO.load("ppo_quadrotor", env=env)
 

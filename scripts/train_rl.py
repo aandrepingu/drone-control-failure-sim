@@ -21,12 +21,23 @@ class RewardLoggerCallback(BaseCallback):
         return True
 
 def make_env():
-    return DroneEnv(render_mode="human")
+    goal_pos = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+    return DroneEnv(
+        render_mode=None,
+        goal_pos=np.array([0.0, 0.0, 1.0]),
+        pos_range=(-0.05, 0.05),   # was (-0.5, 0.5)
+        vel_range=(-0.05, 0.05),   # was (-0.2, 0.2)
+        tilt_range=(-0.05, 0.05),  # was (-0.3, 0.3)
+        yaw_range=(-0.05, 0.05),   # was (-0.3, 0.3)
+    )
 
 if __name__ == '__main__':
+    NUM_ENVS = 4
+    TOTAL_STEPS = 300_000
+
     env = DummyVecEnv([make_env])
-    env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.0)
     env = VecMonitor(env)
+    env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.0)
 
     model = PPO(
         "MlpPolicy",
@@ -41,7 +52,7 @@ if __name__ == '__main__':
 
     reward_logger = RewardLoggerCallback()
 
-    model.learn(total_timesteps=300_000, callback=reward_logger)
+    model.learn(total_timesteps=TOTAL_STEPS, callback=reward_logger)
     model.save("ppo_quadrotor")
     env.save("ppo_quadrotor_vecnorm.pkl")
 
