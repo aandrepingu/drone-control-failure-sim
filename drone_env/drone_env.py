@@ -117,8 +117,9 @@ class DroneEnv(gym.Env):
 
     def _get_obs(self):
         state = self.sim.get_state()
-        accel = (state["vel"] - self._prev_vel) / self.dt
-        self._prev_vel = state["vel"].copy()
+        # accel = (state["vel"] - self._prev_vel) / self.dt
+        # self._prev_vel = state["vel"].copy()
+        accel = self.sim.data.qacc[:3].copy()
         return np.concatenate(
             [state["pos"], state["vel"], accel, state["euler"], state["ang_vel"]]
         ).astype(np.float32)
@@ -143,7 +144,6 @@ class DroneEnv(gym.Env):
         return reward
     """
 
-    """
     def _compute_reward(self, action):
         state = self.sim.get_state()
 
@@ -159,35 +159,12 @@ class DroneEnv(gym.Env):
 
         r = 1.0 - np.linalg.norm(pos_err) - C_theta * np.linalg.norm(theta) - C_omega * np.linalg.norm(omega)
         return max(0.0, r)
-    """
-
-    def _compute_reward(self, action):
-        state = self.sim.get_state()
-        pos_err = state["pos"] - self.goal_pos
-        theta = state["euler"]
-        omega = state["ang_vel"]
-
-        # Always-nonzero shaped reward
-        pos_reward = np.exp(-2.0 * np.linalg.norm(pos_err))   # 0 to 1, peaks at goal
-        att_penalty = 0.1 * float(np.dot(theta, theta))
-        ang_penalty = 0.05 * float(np.dot(omega, omega))
-        action_penalty = 0.001 * float(np.dot(action, action))
-
-        # Survival bonus — reward just staying alive each timestep
-        survival = 0.1
-
-        reward = pos_reward + survival - att_penalty - ang_penalty - action_penalty
-
-        # Crash penalty
-        if self._check_terminated():
-            reward -= 1.0
-
-        return float(reward)
 
     def _compute_hover_action(self) -> np.ndarray:
         """Equal thrust on all motors to approximately hover."""
         return np.full(4, 0.5, dtype=np.float64)
 
+    """
     def _check_terminated(self):
         state = self.sim.get_state()
         z = state["pos"][2]
@@ -198,6 +175,19 @@ class DroneEnv(gym.Env):
         if abs(roll) > 1.2 or abs(pitch) > 1.2:
             return True
         if np.linalg.norm(state["pos"] - self.goal_pos) > 2.0:
+            return True
+        return False
+    """
+
+    def _check_terminated(self):
+        if self.steps < self.warmup_steps:
+            return False
+        state = self.sim.get_state()
+        if state["pos"][2] < 0.0:
+            return True
+        if abs(state["euler"][0]) > 1.2 or abs(state["euler"][1]) > 1.2:
+            return True
+        if np.linalg.norm(state["pos"] - self.goal_pos) > 3.0:
             return True
         return False
 

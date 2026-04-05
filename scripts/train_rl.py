@@ -21,19 +21,19 @@ class RewardLoggerCallback(BaseCallback):
         return True
 
 def make_env():
-    goal_pos = np.array([0.0, 0.0, 1.0], dtype=np.float64)
     return DroneEnv(
         render_mode=None,
         goal_pos=np.array([0.0, 0.0, 1.0]),
-        pos_range=(-0.05, 0.05),   # was (-0.5, 0.5)
-        vel_range=(-0.05, 0.05),   # was (-0.2, 0.2)
-        tilt_range=(-0.05, 0.05),  # was (-0.3, 0.3)
-        yaw_range=(-0.05, 0.05),   # was (-0.3, 0.3)
+        pos_range=(-0.3, 0.3),   
+        vel_range=(-0.1, 0.1),   
+        tilt_range=(-0.1, 0.1),  
+        yaw_range=(-0.1, 0.1),   
+        warmup_steps=20,
     )
 
 if __name__ == '__main__':
     NUM_ENVS = 4
-    TOTAL_STEPS = 300_000
+    TOTAL_STEPS = 500_000
 
     env = DummyVecEnv([make_env])
     env = VecMonitor(env)
