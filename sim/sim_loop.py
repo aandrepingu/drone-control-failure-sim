@@ -3,13 +3,14 @@ import numpy as np
 from sim.sim_config import SimConfig
 from scipy.spatial.transform import Rotation
 from sim.controllers.base import BaseController
+import time
 
 class Simulator:
     """
     Class which holds the simulated model, data, and failures we want to simulate,
     as well as time for future visualization and analysis purposes
     """
-    def __init__(self, model, data, sim_config, controller:BaseController=None, failures=None):
+    def __init__(self, model, data, sim_config:SimConfig, controller:BaseController=None, failures=None):
         """
         Initialize the Simulator object, capturing any failures
         if any are passed in. If not, a basic hover simulation with
@@ -21,15 +22,17 @@ class Simulator:
         self.controller = controller 
         self.time = 0.0
         self.config = sim_config
-        self.apply_config(self.config)
+        if self.config is not None:
+            self.apply_config(self.config)
         self.prev_vel = np.zeros(3)
 
         self.target = {
-            'pos' : sim_config.position,
+            'pos' : sim_config.position if sim_config is not None else self.data.qpos[0:3].copy(),
             "roll": 0.0,
             "pitch": 0.0,
             "yaw": 0.0
         }
+        print(self.target)
 
         # set our drone to hover initially; this should be parameterized out later
         # when we get a proper "scenario" setup design
@@ -51,18 +54,21 @@ class Simulator:
         """
         Extract drone state from mujoco.
         """
-        pos = self.data.qpos[0:3]
+        pos = self.data.qpos[0:3].copy()
 
-        quat = self.data.qpos[3:7]
+        quat = self.data.qpos[3:7].copy()
         quat_xyzw = np.array([quat[1],quat[2],quat[3],quat[0]])
         r = Rotation.from_quat(quat_xyzw, scalar_first=False)
-        euler = r.as_euler("xyz")
+        euler = r.as_euler('zyx')
+        euler = np.array([euler[2], euler[1], euler[0]])  # roll, pitch, yaw
 
-        vel = self.data.qvel[0:3]
-        ang_vel = self.data.qvel[3:6]
+        vel = self.data.qvel[0:3].copy()
 
         acc = ( vel - self.prev_vel ) / dt
         self.prev_vel = vel.copy()
+
+        ang_vel_world = self.data.qvel[3:6].copy()
+        ang_vel_body = r.inv().apply(ang_vel_world)
 
         """
         15-dimensional vector of state, consisting of displacement, velocity,
@@ -73,13 +79,14 @@ class Simulator:
             "pos": pos,
             "vel": vel,
             "euler": euler,
-            "ang_vel": ang_vel,
-            "accel" : acc
+            "ang_vel": ang_vel_body,
+            "accel" : acc,
         }
-
 
     def reset(self):
         self.apply_config(self.config)
+        if self.controller is not None:
+            self.controller.reset()
 
 
     def mix(self, thrust_d, roll_d, pitch_d, yaw_d):
@@ -103,7 +110,7 @@ class Simulator:
         # clip motor forces to be in the range [0,7.0]. This can be moved outside the mix function if needed
         # Note that this is hardcoded to match the ctrlrange of our model's actuators.
         # This should be changed if a different model is used; TODO to parameterize the ctrlrange somehow
-        return np.clip(res, 0, 7.0)
+        return np.clip(res, 0.0, 7.0)
        
 
 
@@ -114,7 +121,6 @@ class Simulator:
         :param dt: time step length
         """
         state = self.get_state(dt)
-        
         if self.controller is not None:
             thrust, roll, pitch, yaw = self.controller.compute_control(
                 state,
@@ -129,3 +135,10 @@ class Simulator:
             f.apply(self, self.time)
         mujoco.mj_step(self.model, self.data)
         self.time += dt
+        if self.time > 20:
+            self.target = {
+                'pos' : [0,0,0],
+                "roll": 0.0,
+                "pitch": 0.0,
+                "yaw": 0.0
+            }

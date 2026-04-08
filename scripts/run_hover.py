@@ -15,8 +15,8 @@ print(mass)
 # failures = [
 #     ThrustLoss(start_time=np.random.uniform(low=3,high=6),alpha=np.random.uniform(low=0,high=1),prop=np.random.choice(range(4)))
 #     for _ in range(3)]
+# failures = [ThrustLoss(start_time=np.random.uniform(low=1.0,high=3.0),alpha = 0.01,prop=np.random.choice(range(4)))]
 failures = []
-
 pos_range = np.array([-0.5, 0.5])
 vel_range = np.array([0.5, 2.0])
 tilt_range = np.array([-1, 1])

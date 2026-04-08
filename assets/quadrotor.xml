@@ -44,10 +44,10 @@
     <actuator>
 		<!-- <motor ctrllimited="true" ctrlrange="0.0 7.0" gear="0  0. 1. 0. 0. 0." site="thrust"/> -->
 		<!-- four actuators, one for each motor-->
-		<motor site="motor0" ctrlrange="0.0 7.0" gear="0 0 1 0 0 0.5"/>
-		<motor site="motor1" ctrlrange="0.0 7.0" gear="0 0 1 0 0 -0.5"/>
-		<motor site="motor2" ctrlrange="0.0 7.0" gear="0 0 1 0 0 0.5"/>
-		<motor site="motor3" ctrlrange="0.0 7.0" gear="0 0 1 0 0 -0.5"/>
+		<motor site="motor0" ctrlrange="0.0 7.0" gear="0 0 1 0 0 0"/>
+		<motor site="motor1" ctrlrange="0.0 7.0" gear="0 0 1 0 0 0"/>
+		<motor site="motor2" ctrlrange="0.0 7.0" gear="0 0 1 0 0 0"/>
+		<motor site="motor3" ctrlrange="0.0 7.0" gear="0 0 1 0 0 0"/>
 
 		<!-- No need for pitch/roll/yaw actuators anymore since quadrotors change these based off thrust differences-->
 		<!-- <velocity ctrllimited="true" ctrlrange="-1 1" gear="0. 0. 0. 1. 0. 0." kv="0.1" site="rateX"/>
