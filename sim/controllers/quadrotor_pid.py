@@ -17,15 +17,15 @@ class QuadrotorPIDController(BaseController):
         # Outer loop: position error → desired angle
         self.max_angle = 0.4  # radians
 
-        self.x_pid = PID(0.5, 0.2, 1, dt, output_limits=(-self.max_angle,self.max_angle))
-        self.y_pid = PID(0.5, 0.2, 1, dt, output_limits=(-self.max_angle,self.max_angle))
-        self.z_pid = PID(6.0, 0.001, 3.0,  dt, output_limits=(-3,3),integral_limits=(-1,1))
+        self.x_pid = PID(0.9, 0.0, 2.2, dt, output_limits=(-self.max_angle,self.max_angle))
+        self.y_pid = PID(0.9, 0.0, 2.2, dt, output_limits=(-self.max_angle,self.max_angle))
+        self.z_pid = PID(10.0, 0.1, 5.0,  dt, output_limits=(-3,3),integral_limits=(-1,1))
 
         # Inner loop: attitude error → torques
         torque_limit = 1.0
-        self.roll_pid  = PID(5.0, 0.5, 1.0, dt, output_limits=(-torque_limit, torque_limit), is_angle=True)
-        self.pitch_pid = PID(5.0, 0.5, 0.3, dt, output_limits=(-torque_limit, torque_limit), is_angle=True)
-        self.yaw_pid   = PID(5.0, 0.0, 0.5, dt, output_limits=(-torque_limit, torque_limit), is_angle=True)
+        self.roll_pid  = PID(3.0, 0.0, 0.4, dt, output_limits=(-torque_limit, torque_limit), is_angle=True)
+        self.pitch_pid = PID(3.0, 0.0, 0.4, dt, output_limits=(-torque_limit, torque_limit), is_angle=True)
+        self.yaw_pid   = PID(2.0, 0.0, 0.2, dt, output_limits=(-torque_limit, torque_limit), is_angle=True)
 
         # Clamp desired angles to safe range
 
@@ -68,8 +68,6 @@ class QuadrotorPIDController(BaseController):
         # --- Altitude ---
         thrust_correction = self.z_pid.update(measurement=pos[2], target=z_target)
         tilt_compensation =  np.cos(roll) * np.cos(pitch)
-        if tilt_compensation > 1.0 or tilt_compensation < 0.5:
-            print(tilt_compensation)
         total_thrust = (self.base_thrust + thrust_correction) / (
             4 * tilt_compensation
         )
@@ -112,6 +110,6 @@ class QuadrotorPIDController(BaseController):
         # yaw_cmd   = self.yaw_pid.update(measurement=yaw_error, target=0.0)
         yaw_cmd   = self.yaw_pid.update(measurement=yaw, target=yaw_target)
 
-        print((pitch_des, roll_des,yaw_cmd))
+        # print((pitch_des, roll_des,yaw_cmd))
 
         return total_thrust, roll_cmd, pitch_cmd, yaw_cmd
