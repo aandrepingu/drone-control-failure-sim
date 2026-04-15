@@ -17,8 +17,8 @@ class QuadrotorPIDController(BaseController):
         # Outer loop: position error → desired angle
         self.max_angle = 0.4  # radians
 
-        self.x_pid = PID(0.9, 0.0, 2.2, dt, output_limits=(-self.max_angle,self.max_angle))
-        self.y_pid = PID(0.9, 0.0, 2.2, dt, output_limits=(-self.max_angle,self.max_angle))
+        self.x_pid = PID(0.67, 0.021, 2., dt, output_limits=(-self.max_angle,self.max_angle))
+        self.y_pid = PID(0.67, 0.021, 2., dt, output_limits=(-self.max_angle,self.max_angle))
         self.z_pid = PID(10.0, 0.1, 5.0,  dt, output_limits=(-3,3),integral_limits=(-1,1))
 
         # Inner loop: attitude error → torques
