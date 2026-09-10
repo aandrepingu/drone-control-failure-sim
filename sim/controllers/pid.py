@@ -21,6 +21,7 @@ class PID:
 
         self.integral = 0.0
         self.prev_error = 0.0
+        self.prev_value = 0.0
         
         # output limits and integral limits should be (low,high) tuples
         self.output_limits = output_limits
@@ -46,7 +47,7 @@ class PID:
 
         # derivative
         if derivative_override is None:
-            derivative = (error - self.prev_error) / self.dt
+            derivative = -(measurement - self.prev_value) / self.dt
         else:
             derivative = -derivative_override
 
@@ -57,6 +58,7 @@ class PID:
         )
 
         self.prev_error = error
+        self.prev_value = measurement
 
         if self.output_limits is not None:
             low, high = self.output_limits
