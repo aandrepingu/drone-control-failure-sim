@@ -1,8 +1,9 @@
 import mujoco
 import numpy as np
-from core.sim_module import SimModule
-from core.state import SensorData, ControlTargets, ActuatorState, FaultStatus
-from controllers.base import BaseController
+
+from sim.controllers.base import BaseController
+from sim.core.sim_module import SimModule
+from sim.core.state import ActuatorState, ControlTargets, SensorData
 
 
 class ControlModule(SimModule):

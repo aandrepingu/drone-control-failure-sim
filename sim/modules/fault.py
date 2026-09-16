@@ -1,6 +1,6 @@
 import numpy as np
 
-from sim.core.base_module import SimModule
+from sim.core.sim_module import SimModule
 from sim.core.state import ActuatorState, FaultStatus
 
 
@@ -14,7 +14,7 @@ class FaultModule(SimModule):
         actuator_state: ActuatorState,
         fault_status: FaultStatus,
     ):
-        super().__init__(period=2, offset=fault_status.fault_start_time)
+        super().__init__(period=2, offset=fault_status.fault_start_time or 0)
         self.actuator_state = actuator_state
         self.fault_status = fault_status
 

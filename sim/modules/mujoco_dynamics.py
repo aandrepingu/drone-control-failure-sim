@@ -1,8 +1,9 @@
 import mujoco
 import numpy as np
-from core.sim_module import SimModule
-from core.state import ActuatorState, DynamicsState
 from scipy.spatial.transform import Rotation as R
+
+from sim.core.sim_module import SimModule
+from sim.core.state import ActuatorState, DynamicsState
 
 
 class MujocoDynamicsModule(SimModule):

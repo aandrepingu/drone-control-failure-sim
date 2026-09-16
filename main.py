@@ -1,21 +1,19 @@
-import time
 from pathlib import Path
 
 import mujoco
+import mujoco.viewer
 import numpy as np
 
 from sim.controllers.quadrotor_pid import QuadrotorPIDController
 from sim.core.sim_loop import SimLoop
-from sim.core.sim_module import SimModule
 from sim.core.state import *
-from sim.failures.thrust_loss import ThrustLoss
 from sim.modules.control import ControlModule
+from sim.modules.fault import FaultModule
 from sim.modules.mujoco_dynamics import MujocoDynamicsModule
 from sim.modules.sensors import SensorModule
-from sim.modules.fault import FaultModule
 from sim.sim_config import SimConfig
 
-ASSETS = Path(__file__).resolve().parents[1] / "assets"
+ASSETS = Path(__file__).resolve().parents[0] / "assets"
 
 
 def load_model(xml_name="quadrotor.xml"):
@@ -110,21 +108,34 @@ def init_modules(
     sim_loop.add_module(fault_module)
 
 
+def apply_init_config(
+    config: SimConfig,
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+):
+    data.qpos[0:3] = config.position
+    data.qpos[3:7] = config.quat
+    data.qvel[0:3] = config.velocity
+
+    mujoco.mj_forward(model, data)
+
+
 if __name__ == "__main__":
     model, data = load_model()
 
-    # pos_range = np.array([-0.5, 0.5])
-    # vel_range = np.array([0.5, 2.0])
-    # tilt_range = np.array([-1, 1])
-    # yaw_range = np.array([-1, 1])
+    pos_range = np.array([-0.5, 0.5])
+    vel_range = np.array([0.5, 2.0])
+    tilt_range = np.array([-1, 1])
+    yaw_range = np.array([-1, 1])
 
-    # cfg = SimConfig.random(pos_range,vel_range,tilt_range, yaw_range)
+    cfg = SimConfig.random(pos_range, vel_range, tilt_range, yaw_range)
     # controller = QuadrotorPIDController(mass, dt=0.002)
     # sim = Simulator(model, data, cfg,controller, failures)
     viewer = launch_viewer(model, data)
     sim_loop = SimLoop(viewer)
 
     state_board = StateBoard()
+    apply_init_config(cfg, model, data)
     init_modules(sim_loop, model, data, state_board)
 
     sim_loop.run_forever()

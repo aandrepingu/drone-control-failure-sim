@@ -1,7 +1,8 @@
 import mujoco
 import numpy as np
-from core.sim_module import SimModule
-from core.state import DynamicsState, SensorData
+
+from sim.core.sim_module import SimModule
+from sim.core.state import DynamicsState, SensorData
 
 
 class SensorModule(SimModule):

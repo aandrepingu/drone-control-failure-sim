@@ -20,7 +20,7 @@ class SimLoop:
                 self.viewer.sync()
 
     def run_forever(self):
-        self.run_until(lambda: True)
+        self.run_until(lambda: self.viewer.is_running())
 
     def step(self, current_time: int):
         for module in self.modules:
