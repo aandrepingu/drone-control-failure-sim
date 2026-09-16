@@ -1,60 +1,131 @@
 import numpy as np
+
 from .base import BaseController
 from .pid import PID
 
 
 class QuadrotorPIDController(BaseController):
-
     def __init__(self, mass, dt: float):
-        
+
         self.dt = dt
         self.m = mass
-        # self.L = params["arm_length"]
-        # self.k_yaw = params["yaw_coeff"]
         self.g = 9.81
+        self.base_thrust = self.m * self.g
 
-        # initialize individual PIDs for altitude, roll, pitch, yaw
-        self.alt_pid = PID(6.0, 2.0, 3.0, dt,integral_limits=(-2,2),output_limits=(-2,2),is_angle=False)
-        self.roll_pid = PID(4.0, 0.0, 1.5, dt,integral_limits=(-2,2),output_limits=(-2,2),is_angle=True)
-        self.pitch_pid = PID(4.0, 0.0, 1.5, dt,integral_limits=(-2,2),output_limits=(-2,2),is_angle=True)
-        self.yaw_pid = PID(1.0, 0.0, 0.3, dt,integral_limits=(-2,2),output_limits=(-2,2),is_angle=True)
+        # Outer loop: position error → desired angle
+        self.max_angle = 0.4  # radians
 
+        self.x_pid = PID(
+            0.67, 0.021, 2.0, dt, output_limits=(-self.max_angle, self.max_angle)
+        )
+        self.y_pid = PID(
+            0.67, 0.021, 2.0, dt, output_limits=(-self.max_angle, self.max_angle)
+        )
+        self.z_pid = PID(
+            10.0, 0.1, 5.0, dt, output_limits=(-3, 3), integral_limits=(-1, 1)
+        )
 
+        # Inner loop: attitude error → torques
+        torque_limit = 1.0
+        self.roll_pid = PID(
+            3.0,
+            0.0,
+            0.4,
+            dt,
+            output_limits=(-torque_limit, torque_limit),
+            is_angle=True,
+        )
+        self.pitch_pid = PID(
+            3.0,
+            0.0,
+            0.4,
+            dt,
+            output_limits=(-torque_limit, torque_limit),
+            is_angle=True,
+        )
+        self.yaw_pid = PID(
+            0.04,
+            0.0,
+            0.3,
+            dt,
+            output_limits=(-torque_limit, torque_limit),
+            is_angle=True,
+        )
+
+        # Clamp desired angles to safe range
 
     def reset(self):
-        self.alt_pid.reset()
-        self.roll_pid.reset()
-        self.pitch_pid.reset()
-        self.yaw_pid.reset()
+        for pid in [
+            self.x_pid,
+            self.y_pid,
+            self.z_pid,
+            self.roll_pid,
+            self.pitch_pid,
+            self.yaw_pid,
+        ]:
+            pid.reset()
 
-    def compute_control(self, state, target):
+    def compute_control(
+        self,
+        current_pos: np.ndarray,
+        current_euler: np.ndarray,
+        current_gyro: np.ndarray,
+        target_pos: np.ndarray,
+        target_yaw: float | None = None,
+    ):
         """
-        state:
-            {
-                "pos": np.array([x,y,z]),
-                "euler": np.array([roll,pitch,yaw]),
-            }
-
-        target:
-            {
-                "z": float,
-                "roll": float,
-                "pitch": float,
-                "yaw": float,
-            }
+        Compute PID
         """
+        x, y, z = current_pos
+        roll, pitch, yaw = current_euler
 
-        z = state["pos"][2]
-        roll, pitch, yaw = state["euler"]
-        roll_rate,pitch_rate,yaw_rate=state['ang_vel']
-        # get output from altitude pid
-        thrust_correction = self.alt_pid.update(z,target["z"])
-        thrust = self.m * self.g / 4 + thrust_correction
+        x_target, y_target, z_target = target_pos
 
-        # get output from attitude pids, including angular velocities for derivative
-        roll_cmd = self.roll_pid.update( measurement=roll, target=target["roll"],derivative_override=roll_rate)
-        pitch_cmd= self.pitch_pid.update(measurement=pitch,target=target["pitch"],derivative_override=pitch_rate)
-        yaw_cmd = self.yaw_pid.update( measurement=yaw,target=target["yaw"],derivative_override=yaw_rate)
+        # --- Altitude ---
+        thrust_correction = self.z_pid.update(measurement=z, target=z_target)
+        tilt_compensation = np.cos(roll) * np.cos(pitch)
+        total_thrust = (self.base_thrust + thrust_correction) / (4 * tilt_compensation)
 
-        # apply motor mixing to these outputs
-        return thrust, roll_cmd,pitch_cmd,yaw_cmd
+        err_x_world = x_target - x
+        err_y_world = y_target - y
+
+        if target_yaw is None:
+            target_yaw = np.arctan2(err_y_world, err_x_world)
+            if np.linalg.norm([err_x_world, err_y_world]) < 0.5:
+                target_yaw = yaw
+
+        cos_yaw = np.cos(yaw)
+        sin_yaw = np.sin(yaw)
+
+        # Rotate error into drone body frame
+        err_x_body = err_x_world * cos_yaw + err_y_world * sin_yaw
+        err_y_body = -err_x_world * sin_yaw + err_y_world * cos_yaw
+
+        pitch_des = np.clip(
+            self.x_pid.update(
+                target=0.0,
+                measurement=-err_x_body,  # derivative_override=vel_body[0]
+            ),
+            -self.max_angle,
+            self.max_angle,
+        )
+        roll_des = -np.clip(
+            self.y_pid.update(
+                target=0.0,
+                measurement=-err_y_body,  # derivative_override=vel_body[1]
+            ),
+            -self.max_angle,
+            self.max_angle,
+        )
+
+        roll_cmd = self.roll_pid.update(
+            measurement=roll, target=roll_des, derivative_override=current_gyro[0]
+        )
+        pitch_cmd = self.pitch_pid.update(
+            measurement=pitch, target=pitch_des, derivative_override=current_gyro[1]
+        )
+        yaw_cmd = self.yaw_pid.update(
+            measurement=yaw, target=target_yaw, derivative_override=current_gyro[2]
+        )
+
+        return total_thrust, roll_cmd, pitch_cmd, yaw_cmd
