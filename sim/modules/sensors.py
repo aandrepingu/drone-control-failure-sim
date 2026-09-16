@@ -30,3 +30,6 @@ class SensorModule(SimModule):
         # GPS position and velocity
         self.sensor_data.gps_position[:] = self.dynamics_state.position
         self.sensor_data.gps_velocity[:] = self.dynamics_state.linear_velocity
+
+        # attitude (euler angles)
+        self.sensor_data.estimated_attitude[:] = self.dynamics_state.euler_angles

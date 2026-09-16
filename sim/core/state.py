@@ -59,6 +59,9 @@ class SensorData:
     # Motor RPM
     motor_rpm: np.ndarray = field(default_factory=lambda: np.zeros(4))
 
+    # estimated attitude
+    estimated_attitude: np.ndarray = field(default_factory=lambda: np.zeros(3))
+
 
 @dataclass
 class ControlTargets:
@@ -84,9 +87,6 @@ class ControlTargets:
 class ActuatorState:
     """Raw motor output commands and calculated rotor forces."""
 
-    # Normalized commands [0.0, 1.0] from mixer
-    motor_commands: np.ndarray = field(default_factory=lambda: np.zeros(4))
-
     # Output force per rotor
     motor_thrusts: np.ndarray = field(default_factory=lambda: np.zeros(4))
 
@@ -99,6 +99,9 @@ class FaultStatus:
 
     # [1.0 = healthy, 0.0 = total loss]
     actuator_effectiveness: np.ndarray = field(default_factory=lambda: np.ones(4))
+
+    # Fault start time
+    fault_start_time: int = None
 
     # True if any failure is active
     fault_active: bool = False

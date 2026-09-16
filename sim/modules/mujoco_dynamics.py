@@ -30,7 +30,7 @@ class MujocoDynamicsModule(SimModule):
         then publish dynamics data to the shared state objects.
         """
         # apply motor commands and advance model
-        self.data.ctrl[:] = self.actuator_state.motor_commands
+        self.data.ctrl[:] = self.actuator_state.motor_thrusts
         mujoco.mj_step(self.model, self.data)
 
         # publish ground truth data to DynamicsState object

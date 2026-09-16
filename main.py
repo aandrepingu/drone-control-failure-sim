@@ -12,6 +12,7 @@ from sim.failures.thrust_loss import ThrustLoss
 from sim.modules.control import ControlModule
 from sim.modules.mujoco_dynamics import MujocoDynamicsModule
 from sim.modules.sensors import SensorModule
+from sim.modules.fault import FaultModule
 from sim.sim_config import SimConfig
 
 ASSETS = Path(__file__).resolve().parents[1] / "assets"
@@ -67,7 +68,7 @@ def init_modules(
 
     5. TrajectoryCaptureModule
 
-    -
+    - Manages and captures trajectory over a certain horizon
 
     6. TelemetryModule
 
@@ -102,19 +103,21 @@ def init_modules(
     )
     sim_loop.add_module(control_module)
     
-
+    # fault module
+    fault_module = FaultModule(
+        actuator_state=state_board.actuator_state,
+        fault_status=state_board.fault_status
+    )
+    sim_loop.add_module(fault_module)
 
 if __name__ == "__main__":
     model, data = load_model()
-    mass = model.body_mass.sum()
-    print(mass)
 
-    failures = []
 
-    pos_range = np.array([-0.5, 0.5])
-    vel_range = np.array([0.5, 2.0])
-    tilt_range = np.array([-1, 1])
-    yaw_range = np.array([-1, 1])
+    # pos_range = np.array([-0.5, 0.5])
+    # vel_range = np.array([0.5, 2.0])
+    # tilt_range = np.array([-1, 1])
+    # yaw_range = np.array([-1, 1])
 
     # cfg = SimConfig.random(pos_range,vel_range,tilt_range, yaw_range)
     # controller = QuadrotorPIDController(mass, dt=0.002)
@@ -126,8 +129,3 @@ if __name__ == "__main__":
     init_modules(sim_loop, model, data, state_board)
 
     sim_loop.run_forever()
-
-    # while viewer.is_running():
-    #     sim.step()
-    #     viewer.sync()
-    #     time.sleep(0.002)
