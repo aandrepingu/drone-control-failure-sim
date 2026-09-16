@@ -102,17 +102,16 @@ def init_modules(
         actuator_state=state_board.actuator_state,
     )
     sim_loop.add_module(control_module)
-    
+
     # fault module
     fault_module = FaultModule(
-        actuator_state=state_board.actuator_state,
-        fault_status=state_board.fault_status
+        actuator_state=state_board.actuator_state, fault_status=state_board.fault_status
     )
     sim_loop.add_module(fault_module)
 
+
 if __name__ == "__main__":
     model, data = load_model()
-
 
     # pos_range = np.array([-0.5, 0.5])
     # vel_range = np.array([0.5, 2.0])

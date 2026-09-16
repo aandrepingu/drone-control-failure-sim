@@ -1,7 +1,7 @@
 import numpy as np
+
 from .base import BaseController
 from .pid import PID
-from scipy.spatial.transform import Rotation
 
 
 class QuadrotorPIDController(BaseController):

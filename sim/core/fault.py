@@ -21,8 +21,10 @@ class FaultModule(SimModule):
     def HandleDispatch(self, current_time: int) -> None:
         if not self.fault_status.fault_start_time or not self.fault_status.fault_active:
             return
-    
+
         if current_time > self.fault_status.fault_start_time:
             # Multiply command by efficiency vector [1.0 = normal, 0.0 = complete failure]
             # e.g., actuator_effectiveness = [1.0, 0.5, 1.0, 0.0] -> Motor 1 @ 50%, Motor 3 Dead
-            self.actuator_state.motor_commands *= self.fault_status.actuator_effectiveness
+            self.actuator_state.motor_commands *= (
+                self.fault_status.actuator_effectiveness
+            )

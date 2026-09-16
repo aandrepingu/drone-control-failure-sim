@@ -46,7 +46,7 @@ class ControlModule(SimModule):
             current_pos=self.sensor_data.gps_position,
             current_euler=self.sensor_data.estimated_attitude,
             current_gyro=self.sensor_data.imu_gyro,
-            target_pos=self.control_targets.target_pos
+            target_pos=self.control_targets.target_pos,
         )
 
         self.control_targets.desired_thrust = thrust
@@ -56,7 +56,6 @@ class ControlModule(SimModule):
         raw_motor_commands = self.mixer_matrix @ command_vector
 
         self.actuator_state.motor_thrusts[:] = np.clip(raw_motor_commands, 0.0, 7.0)
-
 
     def _reset_state(self):
         self.controller.reset()
