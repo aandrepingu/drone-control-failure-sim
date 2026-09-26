@@ -26,5 +26,17 @@ class SimLoop:
         for module in self.modules:
             module.Dispatch(current_time)
 
+    def step_n(self, n:int):
+        count = 0
+
+        def condition():
+            nonlocal count
+            if count < n:
+                count += 1
+                return True
+            return False
+
+        self.run_until(condition)
+
     def add_module(self, module: SimModule):
         self.modules.append(module)
