@@ -17,7 +17,7 @@ if __name__ == "__main__":
     model, data = load_model()
     env = DroneEnv(render=True, model=model, data=data)
     mass = model.body_mass.sum()
-    obs, info = env.reset()
+    obs, info = env.reset(options={"""'fault_start_time' : 3000, 'fault_index': np.random.randint(low=0,high=4)"""})
 
     done = False
     action = None

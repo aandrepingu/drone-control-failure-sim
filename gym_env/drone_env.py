@@ -88,18 +88,6 @@ class DroneEnv(gym.Env):
         )
         self.sim_loop.add_module(sensor_module)
 
-        # # control module
-        # controller = QuadrotorPIDController(
-        #     mass=self.mj_model.body_mass.sum(), dt=0.002
-        # )
-        # control_module = ControlModule(
-        #     controller=controller,
-        #     sensor_data=state_board.sensor_data,
-        #     control_targets=state_board.control_targets,
-        #     actuator_state=state_board.actuator_state,
-        # )
-        # self.sim_loop.add_module(control_module)
-
     def apply_init_config(
         self,
         config: SimConfig,
@@ -120,7 +108,7 @@ class DroneEnv(gym.Env):
             pos_range, vel_range, tilt_range, yaw_range, rng=self.np_random
         )
 
-    def __init__(self, render:bool|None, model, data):
+    def __init__(self, render:bool|None, model, data, fault_prob = 0.4):
         super().__init__()
         # Action: 4 motor thrusts
         self.action_space = gym.spaces.Box(low=0, high=1, shape=(4,), dtype=np.float32)
@@ -128,6 +116,8 @@ class DroneEnv(gym.Env):
         self.observation_space = gym.spaces.Box(
             low=-np.inf, high=np.inf, shape=(12,), dtype=np.float32
         )
+
+        self.fault_prob = fault_prob
 
         # Load MuJoCo model
         self.mj_model = model
@@ -148,19 +138,33 @@ class DroneEnv(gym.Env):
         mujoco.mj_resetData(self.mj_model, self.mj_data)
         for module in self.sim_loop.modules:
             module.reset()
+        fault_index = -1
+        fault_start_time = -1
+        inject_fault = self.np_random.random() < self.fault_prob
+        if inject_fault:
+            fault_index = self.np_random.integers(0, 4)
+            fault_start_time = self.np_random.uniform(1000, 5000)
 
-        if options and 'generate_faults' in options:
-            # enable random fault generation
-            pass
-
+        if options and 'fault_start_time' in options:
+            inject_fault = True
+            fault_index = options['fault_index']
+            fault_start_time = options['fault_start_time']
+        
+        if inject_fault:
+            self.state_board.fault_status.fault_active = True
+            thrusts = np.ones(4, dtype=float)
+            thrusts[fault_index] = 0.0
+            self.state_board.fault_status.actuator_effectiveness[:] = thrusts
+            self.state_board.fault_status.fault_start_time = fault_start_time
         # generate and apply new init config
         config = self.generate_init_config()
         self.apply_init_config(config)
 
-        # pass new seed to sensor module
+        # pass new seed to sensor module and update sensor readings
         sensor_seed = int(self.np_random.integers(0, 2**31 - 1))
         self.sim_loop.modules[2].apply_seed(sensor_seed)
-
+        self.sim_loop.modules[2].HandleDispatch(0)
+        
         return self._get_obs(), {}
 
     def step(self, action):

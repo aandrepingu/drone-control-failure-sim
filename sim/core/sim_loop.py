@@ -1,5 +1,6 @@
-from .sim_module import SimModule
 import time
+
+from .sim_module import SimModule
 
 
 class SimLoop:
