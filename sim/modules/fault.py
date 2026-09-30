@@ -25,6 +25,6 @@ class FaultModule(SimModule):
         if current_time > self.fault_status.fault_start_time:
             # Multiply command by efficiency vector [1.0 = normal, 0.0 = complete failure]
             # e.g., actuator_effectiveness = [1.0, 0.5, 1.0, 0.0] -> Motor 1 @ 50%, Motor 3 Dead
-            self.actuator_state.motor_commands *= (
+            self.actuator_state.motor_thrusts *= (
                 self.fault_status.actuator_effectiveness
             )

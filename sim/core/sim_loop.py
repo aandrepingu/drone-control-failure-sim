@@ -1,5 +1,6 @@
-from .sim_module import SimModule
 import time
+
+from .sim_module import SimModule
 
 
 class SimLoop:
@@ -12,12 +13,6 @@ class SimLoop:
 
         while condition_func():
             self.step(current_time)
-            current_time += 2
-            time.sleep(2 / 1000)
-
-            # sync viewer every 16ms
-            if current_time % 16 == 0:
-                self.viewer.sync()
 
     def run_forever(self):
         self.run_until(lambda: self.viewer.is_running())
@@ -25,6 +20,24 @@ class SimLoop:
     def step(self, current_time: int):
         for module in self.modules:
             module.Dispatch(current_time)
+
+        time.sleep(2 / 1000)
+
+        # sync viewer every 16ms
+        if self.viewer and current_time % 16 == 0:
+            self.viewer.sync()
+
+    def step_n(self, n: int):
+        count = 0
+
+        def condition():
+            nonlocal count
+            if count < n:
+                count += 1
+                return True
+            return False
+
+        self.run_until(condition)
 
     def add_module(self, module: SimModule):
         self.modules.append(module)
