@@ -52,7 +52,15 @@ class QuadrotorPIDController(BaseController):
             is_angle=True,
         )
 
-        # Clamp desired angles to safe range
+        self.mixer_matrix = np.array(
+            [
+                [1.0, 1.0, -1.0, 1.0],
+                [1.0, -1.0, -1.0, -1.0],
+                [1.0, -1.0, 1.0, 1.0],
+                [1.0, 1.0, 1.0, -1.0],
+            ],
+            dtype=float,
+        )
 
     def reset(self):
         for pid in [
@@ -66,16 +74,21 @@ class QuadrotorPIDController(BaseController):
             pid.reset()
 
     def compute_control(
-        self,
-        current_pos: np.ndarray,
-        current_euler: np.ndarray,
-        current_gyro: np.ndarray,
-        target_pos: np.ndarray,
-        target_yaw: float | None = None,
-    ):
+        self, obs: np.ndarray, info: dict, target_state: dict
+    ) -> np.ndarray:
         """
         Compute PID
         """
+        if not obs.any():
+            return np.zeros(4)
+
+        current_pos = obs[0:3]
+        current_euler = obs[6:9]
+        body_rates = obs[9:12]
+
+        # 2. Unpack target
+        target_pos = target_state["pos"]
+        target_yaw = target_state["yaw"]
         x, y, z = current_pos
         roll, pitch, yaw = current_euler
 
@@ -119,13 +132,16 @@ class QuadrotorPIDController(BaseController):
         )
 
         roll_cmd = self.roll_pid.update(
-            measurement=roll, target=roll_des, derivative_override=current_gyro[0]
+            measurement=roll, target=roll_des, derivative_override=body_rates[0]
         )
         pitch_cmd = self.pitch_pid.update(
-            measurement=pitch, target=pitch_des, derivative_override=current_gyro[1]
+            measurement=pitch, target=pitch_des, derivative_override=body_rates[1]
         )
         yaw_cmd = self.yaw_pid.update(
-            measurement=yaw, target=target_yaw, derivative_override=current_gyro[2]
+            measurement=yaw, target=target_yaw, derivative_override=body_rates[2]
+        )
+        motor_cmds = self.mixer_matrix @ np.array(
+            [total_thrust, roll_cmd, pitch_cmd, yaw_cmd]
         )
 
-        return total_thrust, roll_cmd, pitch_cmd, yaw_cmd
+        return np.clip(motor_cmds, 0.0, 7.0)

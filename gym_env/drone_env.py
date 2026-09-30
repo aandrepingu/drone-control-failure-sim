@@ -39,80 +39,66 @@ class DroneEnv(gym.Env):
     # metadata = {"render_modes": ["human"]}
     def init_modules(
         self,
-        state_board: StateBoard,
     ):
         """
         Initialize sim modules with shared state objects.
 
         Pipeline Data Flow
-        1. MujocoDynamicsModule
+
+        FaultModule
+
+        - Intercepts commands, applies actuator loss or scaling failures.
+        - Writes modified motor commands to VehicleState, which MujocoDynamicsModule applies immediately after
+
+        MujocoDynamicsModule
 
         - Steps MuJoCo physics.
         - Writes Ground Truth (true position, velocity, orientation quaternion, acceleration, and angular velocity) to VehicleState.
 
-        2. SensorModule
+        SensorModule
 
         - Reads Ground Truth from VehicleState.
         - Applies noise, biases, latency, and drift.
         - Writes Sensor Data to VehicleState.
 
-        3. ControlModule
-
-        - Reads Sensor Data (or an estimated state derived from sensors).
-        - Calculates body torques / motor commands.
-        - Writes raw command output to VehicleState.
-
-        4. FaultModule
-
-        - Intercepts commands, applies actuator loss or scaling failures.
-        - Writes modified motor commands to VehicleState, which DynamicsModule applies on the next tick.
-
-        5. TrajectoryCaptureModule
-
-        - Manages and captures trajectory over a certain horizon
-
-        6. TelemetryModule
-
-        - Logs state information to parquet
-
-        7. RewardModule
+        RewardModule
 
         - Computes reward for RL purposes
         """
+
+        # fault module
+        fault_module = FaultModule(
+            actuator_state=self.state_board.actuator_state,
+            fault_status=self.state_board.fault_status,
+        )
+        self.sim_loop.add_module(fault_module)
         # dynamics module
         dynamics_module = MujocoDynamicsModule(
             model=self.mj_model,
             data=self.mj_data,
-            dynamics_state=state_board.dynamics_state,
-            actuator_state=state_board.actuator_state,
+            dynamics_state=self.state_board.dynamics_state,
+            actuator_state=self.state_board.actuator_state,
         )
         self.sim_loop.add_module(dynamics_module)
 
         # sensor module
         sensor_module = SensorModule(
-            dynamics_state=state_board.dynamics_state,
-            sensor_data=state_board.sensor_data,
+            dynamics_state=self.state_board.dynamics_state,
+            sensor_data=self.state_board.sensor_data,
         )
         self.sim_loop.add_module(sensor_module)
 
-        # control module
-        controller = QuadrotorPIDController(
-            mass=self.mj_model.body_mass.sum(), dt=0.002
-        )
-        control_module = ControlModule(
-            controller=controller,
-            sensor_data=state_board.sensor_data,
-            control_targets=state_board.control_targets,
-            actuator_state=state_board.actuator_state,
-        )
-        self.sim_loop.add_module(control_module)
-
-        # fault module
-        fault_module = FaultModule(
-            actuator_state=state_board.actuator_state,
-            fault_status=state_board.fault_status,
-        )
-        self.sim_loop.add_module(fault_module)
+        # # control module
+        # controller = QuadrotorPIDController(
+        #     mass=self.mj_model.body_mass.sum(), dt=0.002
+        # )
+        # control_module = ControlModule(
+        #     controller=controller,
+        #     sensor_data=state_board.sensor_data,
+        #     control_targets=state_board.control_targets,
+        #     actuator_state=state_board.actuator_state,
+        # )
+        # self.sim_loop.add_module(control_module)
 
     def apply_init_config(
         self,
@@ -130,9 +116,11 @@ class DroneEnv(gym.Env):
         tilt_range = np.array([-1, 1])
         yaw_range = np.array([-1, 1])
 
-        return SimConfig.random(pos_range, vel_range, tilt_range, yaw_range)
+        return SimConfig.random(
+            pos_range, vel_range, tilt_range, yaw_range, rng=self.np_random
+        )
 
-    def __init__(self):
+    def __init__(self, render:bool|None, model, data):
         super().__init__()
         # Action: 4 motor thrusts
         self.action_space = gym.spaces.Box(low=0, high=1, shape=(4,), dtype=np.float32)
@@ -142,33 +130,63 @@ class DroneEnv(gym.Env):
         )
 
         # Load MuJoCo model
-        self.mj_model = mujoco.MjModel.from_xml_path("drone_env/quadrotor.xml")
-        self.mj_data = mujoco.MjData(self.model)
-        viewer = launch_viewer(self.mj_model, self.mj_data)
+        self.mj_model = model
+        self.mj_data = data
+        viewer = launch_viewer(self.mj_model, self.mj_data) if render else None
 
         self.sim_loop = SimLoop(viewer)
-        state_board = StateBoard()
+        self.state_board = StateBoard()
         self.apply_init_config(self.generate_init_config())
 
-        self.init_modules(state_board)
+        self.init_modules()
 
         print("Gym env initialization complete")
 
     def reset(self, seed=None, options=None):
+        self.sim_timestamp=0
         super().reset(seed=seed)
-        mujoco.mj_resetData(self.model, self.data)
+        mujoco.mj_resetData(self.mj_model, self.mj_data)
+        for module in self.sim_loop.modules:
+            module.reset()
+
+        if options and 'generate_faults' in options:
+            # enable random fault generation
+            pass
+
+        # generate and apply new init config
+        config = self.generate_init_config()
+        self.apply_init_config(config)
+
+        # pass new seed to sensor module
+        sensor_seed = int(self.np_random.integers(0, 2**31 - 1))
+        self.sim_loop.modules[2].apply_seed(sensor_seed)
+
         return self._get_obs(), {}
 
     def step(self, action):
-        self.data.ctrl[:] = action
-        mujoco.mj_step(self.model, self.data)
+        # apply thrusts from action
+        self.state_board.actuator_state.motor_thrusts[:] = action
+
+        self.sim_loop.step(self.sim_timestamp)
+        self.sim_timestamp += 2
         obs = self._get_obs()
         reward = self._compute_reward()
         done = self._check_done()
         return obs, reward, done, False, {}
 
     def _get_obs(self):
-        return np.concatenate([self.data.qpos, self.data.qvel])
+        """
+        State in the form of:
+        [x, y, z, vx, vy, vz, roll, pitch, yaw, roll rate, pitch rate, yaw_rate]
+        """
+        # placeholder
+        sensors = self.state_board.sensor_data
+
+        obs = np.concatenate(
+            [sensors.gps_position, sensors.gps_velocity, sensors.estimated_attitude, sensors.imu_gyro]
+        ).astype(np.float32)
+
+        return obs
 
     def _compute_reward(self):
         # Placeholder reward
@@ -176,4 +194,6 @@ class DroneEnv(gym.Env):
 
     def _check_done(self):
         # Placeholder termination condition
+        if self.sim_loop.viewer:
+            return not self.sim_loop.viewer.is_running()
         return False

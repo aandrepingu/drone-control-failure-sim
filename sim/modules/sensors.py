@@ -14,6 +14,10 @@ class SensorModule(SimModule):
         super().__init__(period=2, offset=0)
         self.dynamics_state = dynamics_state
         self.sensor_data = sensor_data
+        self.seed = 0
+
+    def apply_seed(self,seed):
+        self.seed = seed
 
     def HandleDispatch(self, current_time: int):
         """
@@ -34,3 +38,4 @@ class SensorModule(SimModule):
 
         # attitude (euler angles)
         self.sensor_data.estimated_attitude[:] = self.dynamics_state.euler_angles
+

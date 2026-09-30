@@ -12,12 +12,6 @@ class SimLoop:
 
         while condition_func():
             self.step(current_time)
-            current_time += 2
-            time.sleep(2 / 1000)
-
-            # sync viewer every 16ms
-            if current_time % 16 == 0:
-                self.viewer.sync()
 
     def run_forever(self):
         self.run_until(lambda: self.viewer.is_running())
@@ -26,7 +20,13 @@ class SimLoop:
         for module in self.modules:
             module.Dispatch(current_time)
 
-    def step_n(self, n:int):
+        time.sleep(2 / 1000)
+
+        # sync viewer every 16ms
+        if self.viewer and current_time % 16 == 0:
+            self.viewer.sync()
+
+    def step_n(self, n: int):
         count = 0
 
         def condition():

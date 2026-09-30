@@ -13,23 +13,37 @@ from sim.modules.sensors import SensorModule
 from sim.sim_config import SimConfig
 
 
-
 if __name__ == "__main__":
     model, data = load_model()
+    env = DroneEnv(render=True, model=model, data=data)
+    mass = model.body_mass.sum()
+    obs, info = env.reset()
 
-    pos_range = np.array([-0.5, 0.5])
-    vel_range = np.array([0.5, 2.0])
-    tilt_range = np.array([-1, 1])
-    yaw_range = np.array([-1, 1])
+    done = False
+    action = None
+    pos = None
+    euler = None
+    gyro = None
+    target_pos = np.zeros(3)
+    target_yaw = None
+    target_state = {"pos": target_pos, "yaw": target_yaw}
 
-    cfg = SimConfig.random(pos_range, vel_range, tilt_range, yaw_range)
-    # controller = QuadrotorPIDController(mass, dt=0.002)
-    # sim = Simulator(model, data, cfg,controller, failures)
-    viewer = launch_viewer(model, data)
-    sim_loop = SimLoop(viewer)
+    controller = QuadrotorPIDController(mass=mass, dt=0.002)
+    while not done:
+        # target_state = trajectory.get_target(env.time)
 
-    state_board = StateBoard()
-    apply_init_config(cfg, model, data)
-    init_modules(sim_loop, model, data, state_board)
+        # # Update env with target so it can calculate reward correctly
+        # env.set_target(target_state)
 
-    sim_loop.run_forever()
+        # calculate control action
+
+        action = controller.compute_control(obs=obs, info={}, target_state=target_state)
+
+        # step plant forward
+        # this will also render the sim if render=True within gym env
+        obs, reward, done, truncated, info = env.step(action)
+        pos = obs[0:3]
+        euler = obs[6:9]
+        body_rates = obs[9:12]
+
+        # telemetry.log(obs, action, target_state, info)
