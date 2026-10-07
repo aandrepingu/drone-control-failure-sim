@@ -23,7 +23,7 @@
 			<site name="motor1" pos=" 0.1 -0.1 0" />
 			<site name="motor2" pos="-0.1 -0.1 0" />
 			<site name="motor3" pos="-0.1  0.1 0" />
-
+			<site name="imu_site" pos="0 0 0" />
 			<!-- Actuator sites for pitch/roll/yaw which are no longer needed-->
             <!-- <site name="rateX"  type="box" pos="0 0 0" quat = "1. 0. 0. 0."  size="0.06 0.035 0.025" rgba="0 1 1 0"/>
             <site name="rateY"  type="box" pos="0 0 0" quat = "1. 0. 0. 0."  size="0.06 0.035 0.025" rgba="0 1 1 0"/>
@@ -41,6 +41,10 @@
 			<site name="qcZ" type="box" pos="0.0 0.0 0.1" size="0.1 0.005 0.005"  quat = "-0.707  0.0  0.707  0."     rgba="0 0 1 1" />
 		</body>
 	</worldbody>
+	<sensor>
+        <accelerometer name="accel" site="imu_site"/>
+        <gyro name="gyro" site="imu_site"/>
+    </sensor>
     <actuator>
 		<!-- <motor ctrllimited="true" ctrlrange="0.0 7.0" gear="0  0. 1. 0. 0. 0." site="thrust"/> -->
 		<!-- four actuators, one for each motor-->
