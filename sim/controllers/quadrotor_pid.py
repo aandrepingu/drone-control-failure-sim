@@ -16,10 +16,10 @@ class QuadrotorPIDController(BaseController):
         self.max_angle = 0.4  # radians
 
         self.x_pid = PID(
-            0.67, 0.021, 2.0, dt, output_limits=(-self.max_angle, self.max_angle)
+            2.5, 0.021, 2.0, dt, output_limits=(-self.max_angle, self.max_angle)
         )
         self.y_pid = PID(
-            0.67, 0.021, 2.0, dt, output_limits=(-self.max_angle, self.max_angle)
+            2.5, 0.021, 2.0, dt, output_limits=(-self.max_angle, self.max_angle)
         )
         self.z_pid = PID(
             10.0, 0.1, 5.0, dt, output_limits=(-3, 3), integral_limits=(-1, 1)
@@ -83,6 +83,8 @@ class QuadrotorPIDController(BaseController):
             return np.zeros(4)
 
         current_pos = obs[0:3]
+        current_vel = obs[3:6]
+        vx, vy, vz = current_vel
         current_euler = obs[6:9]
         body_rates = obs[9:12]
 
@@ -95,7 +97,9 @@ class QuadrotorPIDController(BaseController):
         x_target, y_target, z_target = target_pos
 
         # --- Altitude ---
-        thrust_correction = self.z_pid.update(measurement=z, target=z_target)
+        thrust_correction = self.z_pid.update(
+            measurement=z, target=z_target, derivative_override=vz
+        )
         tilt_compensation = np.cos(roll) * np.cos(pitch)
         total_thrust = (self.base_thrust + thrust_correction) / (4 * tilt_compensation)
 
@@ -114,18 +118,19 @@ class QuadrotorPIDController(BaseController):
         err_x_body = err_x_world * cos_yaw + err_y_world * sin_yaw
         err_y_body = -err_x_world * sin_yaw + err_y_world * cos_yaw
 
+        vel_x_body = vx * cos_yaw + vy * sin_yaw
+        vel_y_body = -vx * sin_yaw + vy * cos_yaw
+
         pitch_des = np.clip(
             self.x_pid.update(
-                target=0.0,
-                measurement=-err_x_body,  # derivative_override=vel_body[0]
+                target=0.0, measurement=-err_x_body, derivative_override=vel_x_body
             ),
             -self.max_angle,
             self.max_angle,
         )
         roll_des = -np.clip(
             self.y_pid.update(
-                target=0.0,
-                measurement=-err_y_body,  # derivative_override=vel_body[1]
+                target=0.0, measurement=-err_y_body, derivative_override=vel_y_body
             ),
             -self.max_angle,
             self.max_angle,

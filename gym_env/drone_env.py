@@ -108,7 +108,7 @@ class DroneEnv(gym.Env):
             pos_range, vel_range, tilt_range, yaw_range, rng=self.np_random
         )
 
-    def __init__(self, render:bool|None, model, data, fault_prob = 0.4):
+    def __init__(self, render: bool | None, model, data, fault_prob=0.4):
         super().__init__()
         # Action: 4 motor thrusts
         self.action_space = gym.spaces.Box(low=0, high=1, shape=(4,), dtype=np.float32)
@@ -133,7 +133,7 @@ class DroneEnv(gym.Env):
         print("Gym env initialization complete")
 
     def reset(self, seed=None, options=None):
-        self.sim_timestamp=0
+        self.sim_timestamp = 0
         super().reset(seed=seed)
         mujoco.mj_resetData(self.mj_model, self.mj_data)
         for module in self.sim_loop.modules:
@@ -145,11 +145,11 @@ class DroneEnv(gym.Env):
             fault_index = self.np_random.integers(0, 4)
             fault_start_time = self.np_random.uniform(1000, 5000)
 
-        if options and 'fault_start_time' in options:
+        if options and "fault_start_time" in options:
             inject_fault = True
-            fault_index = options['fault_index']
-            fault_start_time = options['fault_start_time']
-        
+            fault_index = options["fault_index"]
+            fault_start_time = options["fault_start_time"]
+
         if inject_fault:
             self.state_board.fault_status.fault_active = True
             thrusts = np.ones(4, dtype=float)
@@ -164,7 +164,7 @@ class DroneEnv(gym.Env):
         sensor_seed = int(self.np_random.integers(0, 2**31 - 1))
         self.sim_loop.modules[2].apply_seed(sensor_seed)
         self.sim_loop.modules[2].HandleDispatch(0)
-        
+
         return self._get_obs(), {}
 
     def step(self, action):
@@ -187,7 +187,12 @@ class DroneEnv(gym.Env):
         sensors = self.state_board.sensor_data
 
         obs = np.concatenate(
-            [sensors.gps_position, sensors.gps_velocity, sensors.estimated_attitude, sensors.imu_gyro]
+            [
+                sensors.gps_position,
+                sensors.gps_velocity,
+                sensors.estimated_attitude,
+                sensors.imu_gyro,
+            ]
         ).astype(np.float32)
 
         return obs

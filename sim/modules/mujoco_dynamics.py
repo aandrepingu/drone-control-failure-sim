@@ -48,5 +48,16 @@ class MujocoDynamicsModule(SimModule):
 
         # velocities and accelerations
         self.dynamics_state.linear_velocity[:] = self.data.qvel[0:3]
-        self.dynamics_state.angular_velocity[:] = self.data.qvel[3:6]
-        self.dynamics_state.acceleration[:] = self.data.qacc[0:3]
+        gyro_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "gyro")
+        gyro_adr = self.model.sensor_adr[gyro_id]
+        gyro_dim = self.model.sensor_dim[gyro_id]
+        self.dynamics_state.angular_velocity[:] = self.data.sensordata[
+            gyro_adr : gyro_adr + gyro_dim
+        ]
+
+        accel_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "accel")
+        accel_adr = self.model.sensor_adr[accel_id]
+        accel_dim = self.model.sensor_dim[accel_id]
+        self.dynamics_state.acceleration[:] = self.data.sensordata[
+            accel_adr : accel_adr + accel_dim
+        ]
