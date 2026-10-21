@@ -4,6 +4,7 @@ import gymnasium as gym
 import mujoco
 import mujoco.viewer
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 from sim.controllers.quadrotor_pid import QuadrotorPIDController
 from sim.core.sim_loop import SimLoop
@@ -12,6 +13,7 @@ from sim.modules.control import ControlModule
 from sim.modules.fault import FaultModule
 from sim.modules.mujoco_dynamics import MujocoDynamicsModule
 from sim.modules.sensors import SensorModule
+from sim.modules.wind import WindModule
 from sim.sim_config import SimConfig
 
 ASSETS = Path(__file__).resolve().parents[1] / "assets"
@@ -67,26 +69,33 @@ class DroneEnv(gym.Env):
         """
 
         # fault module
-        fault_module = FaultModule(
+        self.fault_module = FaultModule(
             actuator_state=self.state_board.actuator_state,
             fault_status=self.state_board.fault_status,
         )
-        self.sim_loop.add_module(fault_module)
+        self.sim_loop.add_module(self.fault_module)
+        # wind module
+        self.wind_module = WindModule(
+            wind_state=self.state_board.wind_state,
+            dynamics_state=self.state_board.dynamics_state,
+        )
+        self.sim_loop.add_module(self.wind_module)
         # dynamics module
-        dynamics_module = MujocoDynamicsModule(
+        self.dynamics_module = MujocoDynamicsModule(
             model=self.mj_model,
             data=self.mj_data,
             dynamics_state=self.state_board.dynamics_state,
             actuator_state=self.state_board.actuator_state,
+            wind_state=self.state_board.wind_state,
         )
-        self.sim_loop.add_module(dynamics_module)
+        self.sim_loop.add_module(self.dynamics_module)
 
         # sensor module
-        sensor_module = SensorModule(
+        self.sensor_module = SensorModule(
             dynamics_state=self.state_board.dynamics_state,
             sensor_data=self.state_board.sensor_data,
         )
-        self.sim_loop.add_module(sensor_module)
+        self.sim_loop.add_module(self.sensor_module)
 
     def apply_init_config(
         self,
@@ -97,6 +106,17 @@ class DroneEnv(gym.Env):
         self.mj_data.qvel[0:3] = config.velocity
 
         mujoco.mj_forward(self.mj_model, self.mj_data)
+
+        # sync state board to new initial data
+        self.state_board.dynamics_state.position[:] = self.mj_data.qpos[0:3]
+        quat_wxyz = self.mj_data.qpos[3:7]
+        self.state_board.dynamics_state.quaternion[:] = quat_wxyz
+        quat_xyzw = np.array([quat_wxyz[1], quat_wxyz[2], quat_wxyz[3], quat_wxyz[0]])
+        self.state_board.dynamics_state.euler_angles[:] = R.from_quat(
+            quat_xyzw
+        ).as_euler("xyz")
+        self.state_board.dynamics_state.linear_velocity[:] = self.mj_data.qvel[0:3]
+        self.state_board.dynamics_state.angular_velocity[:] = self.mj_data.qvel[3:6]
 
     def generate_init_config(self) -> SimConfig:
         pos_range = np.array([-0.5, 0.5])
@@ -160,10 +180,19 @@ class DroneEnv(gym.Env):
         config = self.generate_init_config()
         self.apply_init_config(config)
 
+        # seed and initialize wind module
+        wind_seed = int(self.np_random.integers(0, 2**31 - 1))
+        self.wind_module.apply_seed(wind_seed)
+        if options and "wind_force" in options:
+            self.wind_module.set_constant_wind(
+                np.array(options["wind_force"], dtype=float)
+            )
+        self.wind_module.HandleDispatch(0)
+
         # pass new seed to sensor module and update sensor readings
         sensor_seed = int(self.np_random.integers(0, 2**31 - 1))
-        self.sim_loop.modules[2].apply_seed(sensor_seed)
-        self.sim_loop.modules[2].HandleDispatch(0)
+        self.sensor_module.apply_seed(sensor_seed)
+        self.sensor_module.HandleDispatch(0)
 
         return self._get_obs(), {}
 

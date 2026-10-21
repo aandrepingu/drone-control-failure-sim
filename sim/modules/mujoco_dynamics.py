@@ -3,7 +3,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 
 from sim.core.sim_module import SimModule
-from sim.core.state import ActuatorState, DynamicsState
+from sim.core.state import ActuatorState, DynamicsState, WindState
 
 
 class MujocoDynamicsModule(SimModule):
@@ -18,20 +18,27 @@ class MujocoDynamicsModule(SimModule):
         data: mujoco.MjData,
         dynamics_state: DynamicsState,
         actuator_state: ActuatorState,
+        wind_state: WindState,
     ):
         super().__init__(period=2, offset=0)
         self.model = model
         self.data = data
         self.dynamics_state = dynamics_state
         self.actuator_state = actuator_state
+        self.drone_body_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_BODY, "quadrotor"
+        )
+        self.wind_state = wind_state
 
     def HandleDispatch(self, current_time: int):
         """
         Apply calculated motor commands from the control module to the model,
         then publish dynamics data to the shared state objects.
         """
-        # apply motor commands and advance model
+        # apply motor commands + wind and advance model
         self.data.ctrl[:] = self.actuator_state.motor_thrusts
+        self.data.xfrc_applied[self.drone_body_id, 0:3] = self.wind_state.force
+        self.data.xfrc_applied[self.drone_body_id, 3:6] = self.wind_state.torque
         mujoco.mj_step(self.model, self.data)
 
         # publish ground truth data to DynamicsState object
