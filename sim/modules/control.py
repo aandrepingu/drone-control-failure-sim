@@ -58,5 +58,6 @@ class ControlModule(SimModule):
 
         self.actuator_state.motor_thrusts[:] = np.clip(raw_motor_commands, 0.0, 7.0)
 
-    def _reset_state(self):
+    def reset(self):
+        super().reset()
         self.controller.reset()

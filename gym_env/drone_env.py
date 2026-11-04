@@ -4,6 +4,7 @@ import gymnasium as gym
 import mujoco
 import mujoco.viewer
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 from sim.controllers.quadrotor_pid import QuadrotorPIDController
 from sim.core.sim_loop import SimLoop
@@ -12,6 +13,7 @@ from sim.modules.control import ControlModule
 from sim.modules.fault import FaultModule
 from sim.modules.mujoco_dynamics import MujocoDynamicsModule
 from sim.modules.sensors import SensorModule
+from sim.modules.wind import WindModule
 from sim.sim_config import SimConfig
 
 ASSETS = Path(__file__).resolve().parents[1] / "assets"
@@ -67,26 +69,33 @@ class DroneEnv(gym.Env):
         """
 
         # fault module
-        fault_module = FaultModule(
+        self.fault_module = FaultModule(
             actuator_state=self.state_board.actuator_state,
             fault_status=self.state_board.fault_status,
         )
-        self.sim_loop.add_module(fault_module)
+        self.sim_loop.add_module(self.fault_module)
+        # wind module
+        self.wind_module = WindModule(
+            wind_state=self.state_board.wind_state,
+            dynamics_state=self.state_board.dynamics_state,
+        )
+        self.sim_loop.add_module(self.wind_module)
         # dynamics module
-        dynamics_module = MujocoDynamicsModule(
+        self.dynamics_module = MujocoDynamicsModule(
             model=self.mj_model,
             data=self.mj_data,
             dynamics_state=self.state_board.dynamics_state,
             actuator_state=self.state_board.actuator_state,
+            wind_state=self.state_board.wind_state,
         )
-        self.sim_loop.add_module(dynamics_module)
+        self.sim_loop.add_module(self.dynamics_module)
 
         # sensor module
-        sensor_module = SensorModule(
+        self.sensor_module = SensorModule(
             dynamics_state=self.state_board.dynamics_state,
             sensor_data=self.state_board.sensor_data,
         )
-        self.sim_loop.add_module(sensor_module)
+        self.sim_loop.add_module(self.sensor_module)
 
     def apply_init_config(
         self,
@@ -98,15 +107,24 @@ class DroneEnv(gym.Env):
 
         mujoco.mj_forward(self.mj_model, self.mj_data)
 
-    def generate_init_config(self) -> SimConfig:
-        pos_range = np.array([-0.5, 0.5])
-        vel_range = np.array([0.5, 2.0])
-        tilt_range = np.array([-1, 1])
-        yaw_range = np.array([-1, 1])
+        # sync state board to new initial data
+        self.state_board.dynamics_state.position[:] = self.mj_data.qpos[0:3]
+        quat_wxyz = self.mj_data.qpos[3:7]
+        self.state_board.dynamics_state.quaternion[:] = quat_wxyz
+        quat_xyzw = np.array([quat_wxyz[1], quat_wxyz[2], quat_wxyz[3], quat_wxyz[0]])
+        self.state_board.dynamics_state.euler_angles[:] = R.from_quat(
+            quat_xyzw
+        ).as_euler("xyz")
+        self.state_board.dynamics_state.linear_velocity[:] = self.mj_data.qvel[0:3]
+        self.state_board.dynamics_state.angular_velocity[:] = self.mj_data.qvel[3:6]
 
-        return SimConfig.random(
-            pos_range, vel_range, tilt_range, yaw_range, rng=self.np_random
-        )
+        # forward wind force into WindState and WindModule
+        self.state_board.wind_state.force[:] = config.wind_force
+        if hasattr(self, "wind_module"):
+            self.wind_module.reset(config.wind_force)
+
+    def generate_init_config(self, options: dict | None = None) -> SimConfig:
+        return SimConfig.sample(rng=self.np_random, options=options)
 
     def __init__(self, render: bool | None, model, data, fault_prob=0.4):
         super().__init__()
@@ -126,28 +144,22 @@ class DroneEnv(gym.Env):
 
         self.sim_loop = SimLoop(viewer)
         self.state_board = StateBoard()
-        self.apply_init_config(self.generate_init_config())
-
         self.init_modules()
+        self.apply_init_config(self.generate_init_config())
 
         print("Gym env initialization complete")
 
-    def reset(self, seed=None, options=None):
-        self.sim_timestamp = 0
-        super().reset(seed=seed)
-        mujoco.mj_resetData(self.mj_model, self.mj_data)
-        for module in self.sim_loop.modules:
-            module.reset()
+    def _setup_fault(self, options: dict | None = None):
         fault_index = -1
         fault_start_time = -1
         inject_fault = self.np_random.random() < self.fault_prob
         if inject_fault:
-            fault_index = self.np_random.integers(0, 4)
-            fault_start_time = self.np_random.uniform(1000, 5000)
+            fault_index = int(self.np_random.integers(0, 4))
+            fault_start_time = float(self.np_random.uniform(1000, 5000))
 
         if options and "fault_start_time" in options:
             inject_fault = True
-            fault_index = options["fault_index"]
+            fault_index = options.get("fault_index", 0)
             fault_start_time = options["fault_start_time"]
 
         if inject_fault:
@@ -156,14 +168,29 @@ class DroneEnv(gym.Env):
             thrusts[fault_index] = 0.0
             self.state_board.fault_status.actuator_effectiveness[:] = thrusts
             self.state_board.fault_status.fault_start_time = fault_start_time
-        # generate and apply new init config
-        config = self.generate_init_config()
-        self.apply_init_config(config)
 
-        # pass new seed to sensor module and update sensor readings
-        sensor_seed = int(self.np_random.integers(0, 2**31 - 1))
-        self.sim_loop.modules[2].apply_seed(sensor_seed)
-        self.sim_loop.modules[2].HandleDispatch(0)
+    def reset(self, seed=None, options=None):
+        super().reset(seed=seed)
+        self.sim_timestamp = 0
+        mujoco.mj_resetData(self.mj_model, self.mj_data)
+
+        # call self.state_board.reset()
+        self.state_board.reset()
+        self._setup_fault(options=options)
+
+        # sample episode configuration
+        config = SimConfig.sample(rng=self.np_random, options=options)
+
+        # apply config and reset simulation modules cleanly
+        self.apply_init_config(config)
+        for module in self.sim_loop.modules:
+            if isinstance(module, SensorModule):
+                module.reset(rng=self.np_random)
+            else:
+                module.reset()
+
+        # evaluate initial sensor readings and return (obs, info)
+        self.sensor_module.HandleDispatch(0)
 
         return self._get_obs(), {}
 

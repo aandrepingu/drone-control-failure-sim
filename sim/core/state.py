@@ -128,6 +128,14 @@ class RLContext:
 
 
 @dataclass
+class WindState:
+    # 3D force vector [fx, fy, fz] in Newtons
+    force: np.ndarray = field(default_factory=lambda: np.zeros(3, dtype=float))
+    # 3D torque vector [tx, ty, tz] in N*m (world frame, optional for turbulence)
+    torque: np.ndarray = field(default_factory=lambda: np.zeros(3, dtype=float))
+
+
+@dataclass
 class StateBoard:
     dynamics_state: DynamicsState = field(default_factory=DynamicsState)
     sensor_data: SensorData = field(default_factory=SensorData)
@@ -135,5 +143,15 @@ class StateBoard:
     actuator_state: ActuatorState = field(default_factory=ActuatorState)
     fault_status: FaultStatus = field(default_factory=FaultStatus)
     rl_context: RLContext = field(default_factory=RLContext)
+    wind_state: WindState = field(default_factory=WindState)
 
     sim_control_cycle_time: float = 0.0
+
+    def reset(self):
+        self.actuator_state.motor_thrusts[:] = np.zeros(4)
+        self.fault_status.fault_active = False
+        self.fault_status.actuator_effectiveness[:] = np.ones(4)
+        self.rl_context.reward = 0.0
+        self.rl_context.step_count = 0
+        self.rl_context.truncated = False
+        self.rl_context.terminated = False
