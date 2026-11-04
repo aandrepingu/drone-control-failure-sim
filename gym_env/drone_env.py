@@ -118,15 +118,13 @@ class DroneEnv(gym.Env):
         self.state_board.dynamics_state.linear_velocity[:] = self.mj_data.qvel[0:3]
         self.state_board.dynamics_state.angular_velocity[:] = self.mj_data.qvel[3:6]
 
-    def generate_init_config(self) -> SimConfig:
-        pos_range = np.array([-0.5, 0.5])
-        vel_range = np.array([0.5, 2.0])
-        tilt_range = np.array([-1, 1])
-        yaw_range = np.array([-1, 1])
+        # forward wind force into WindState and WindModule
+        self.state_board.wind_state.force[:] = config.wind_force
+        if hasattr(self, "wind_module"):
+            self.wind_module.reset(config.wind_force)
 
-        return SimConfig.random(
-            pos_range, vel_range, tilt_range, yaw_range, rng=self.np_random
-        )
+    def generate_init_config(self, options: dict | None = None) -> SimConfig:
+        return SimConfig.sample(rng=self.np_random, options=options)
 
     def __init__(self, render: bool | None, model, data, fault_prob=0.4):
         super().__init__()
@@ -146,28 +144,22 @@ class DroneEnv(gym.Env):
 
         self.sim_loop = SimLoop(viewer)
         self.state_board = StateBoard()
-        self.apply_init_config(self.generate_init_config())
-
         self.init_modules()
+        self.apply_init_config(self.generate_init_config())
 
         print("Gym env initialization complete")
 
-    def reset(self, seed=None, options=None):
-        self.sim_timestamp = 0
-        super().reset(seed=seed)
-        mujoco.mj_resetData(self.mj_model, self.mj_data)
-        for module in self.sim_loop.modules:
-            module.reset()
+    def _setup_fault(self, options: dict | None = None):
         fault_index = -1
         fault_start_time = -1
         inject_fault = self.np_random.random() < self.fault_prob
         if inject_fault:
-            fault_index = self.np_random.integers(0, 4)
-            fault_start_time = self.np_random.uniform(1000, 5000)
+            fault_index = int(self.np_random.integers(0, 4))
+            fault_start_time = float(self.np_random.uniform(1000, 5000))
 
         if options and "fault_start_time" in options:
             inject_fault = True
-            fault_index = options["fault_index"]
+            fault_index = options.get("fault_index", 0)
             fault_start_time = options["fault_start_time"]
 
         if inject_fault:
@@ -176,22 +168,28 @@ class DroneEnv(gym.Env):
             thrusts[fault_index] = 0.0
             self.state_board.fault_status.actuator_effectiveness[:] = thrusts
             self.state_board.fault_status.fault_start_time = fault_start_time
-        # generate and apply new init config
-        config = self.generate_init_config()
+
+    def reset(self, seed=None, options=None):
+        super().reset(seed=seed)
+        self.sim_timestamp = 0
+        mujoco.mj_resetData(self.mj_model, self.mj_data)
+
+        # call self.state_board.reset()
+        self.state_board.reset()
+        self._setup_fault(options=options)
+
+        # sample episode configuration
+        config = SimConfig.sample(rng=self.np_random, options=options)
+
+        # apply config and reset simulation modules cleanly
         self.apply_init_config(config)
+        for module in self.sim_loop.modules:
+            if isinstance(module, SensorModule):
+                module.reset(rng=self.np_random)
+            else:
+                module.reset()
 
-        # seed and initialize wind module
-        wind_seed = int(self.np_random.integers(0, 2**31 - 1))
-        self.wind_module.apply_seed(wind_seed)
-        if options and "wind_force" in options:
-            self.wind_module.set_constant_wind(
-                np.array(options["wind_force"], dtype=float)
-            )
-        self.wind_module.HandleDispatch(0)
-
-        # pass new seed to sensor module and update sensor readings
-        sensor_seed = int(self.np_random.integers(0, 2**31 - 1))
-        self.sensor_module.apply_seed(sensor_seed)
+        # evaluate initial sensor readings and return (obs, info)
         self.sensor_module.HandleDispatch(0)
 
         return self._get_obs(), {}

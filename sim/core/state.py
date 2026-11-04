@@ -146,3 +146,12 @@ class StateBoard:
     wind_state: WindState = field(default_factory=WindState)
 
     sim_control_cycle_time: float = 0.0
+
+    def reset(self):
+        self.actuator_state.motor_thrusts[:] = np.zeros(4)
+        self.fault_status.fault_active = False
+        self.fault_status.actuator_effectiveness[:] = np.ones(4)
+        self.rl_context.reward = 0.0
+        self.rl_context.step_count = 0
+        self.rl_context.truncated = False
+        self.rl_context.terminated = False

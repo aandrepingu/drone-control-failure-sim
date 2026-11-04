@@ -15,7 +15,7 @@ class SensorModule(SimModule):
         self.dynamics_state = dynamics_state
         self.sensor_data = sensor_data
         self.seed = 0
-        self.rng = np.random.RandomState(self.seed)
+        self.rng = np.random.default_rng(self.seed)
 
         # Base noise parameters (Standard Deviations)
         self.imu_accel_noise = 0.1
@@ -27,9 +27,22 @@ class SensorModule(SimModule):
         # State for autocorrelated attitude error (faking an EKF output)
         self.attitude_error = np.zeros(3)
 
-    def apply_seed(self, seed):
-        self.seed = seed
-        self.rng = np.random.RandomState(seed)
+    def reset(self, rng: np.random.Generator | None = None):
+        """
+        Resets module timing, clears filtered attitude estimation error,
+        and optionally re-seeds the random number generator.
+
+        """
+        super().reset()
+        self.attitude_error = np.zeros(3)
+
+        if rng is not None:
+            seed = int(rng.integers(0, 2**31 - 1))
+            self.apply_seed(seed)
+
+    def apply_seed(self, seed: int):
+        self.seed = int(seed)
+        self.rng = np.random.default_rng(self.seed)
 
         # Reset autocorrelated state to ensure deterministic runs
         self.attitude_error = np.zeros(3)

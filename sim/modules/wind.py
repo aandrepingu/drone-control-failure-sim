@@ -39,15 +39,24 @@ class WindModule(SimModule):
         fy = self.rng.uniform(-self.max_xy_force, self.max_xy_force)
         fz = self.rng.uniform(-self.max_z_force, self.max_z_force)
 
-        self.episode_wind_force[:] = [fx, fy, fz]
-        self.wind_state.force[:] = self.episode_wind_force
-        self.wind_state.torque[:] = 0.0
-        print(f"Wind vector: {self.episode_wind_force}")
+        self.reset(wind_force=np.array([fx, fy, fz], dtype=float))
 
     def set_constant_wind(self, force_vector: np.ndarray):
         """Allows manual override via env.reset(options={'wind_force': [fx, fy, fz]})"""
-        self.episode_wind_force[:] = force_vector
-        self.wind_state.force[:] = self.episode_wind_force
+        self.reset(wind_force=force_vector)
 
     def HandleDispatch(self, current_time: int) -> None:
         self.wind_state.force[:] = self.episode_wind_force
+
+    def reset(self, wind_force: np.ndarray | None = None):
+        """
+        Resets module timing and applies the episode wind force.
+
+        :param wind_force: 3D force vector [fx, fy, fz] in Newtons.
+        """
+        super().reset()
+        if wind_force is not None:
+            self.episode_wind_force[:] = np.asarray(wind_force, dtype=float)
+            print(f"Wind vector: {self.episode_wind_force}")
+        self.wind_state.force[:] = self.episode_wind_force
+        self.wind_state.torque[:] = 0.0
