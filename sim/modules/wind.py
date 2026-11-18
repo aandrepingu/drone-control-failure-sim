@@ -48,7 +48,7 @@ class WindModule(SimModule):
     def HandleDispatch(self, current_time: int) -> None:
         self.wind_state.force[:] = self.episode_wind_force
 
-    def reset(self, wind_force: np.ndarray | None = None):
+    def reset(self, wind_force: np.ndarray | None = None, verbose: bool = False):
         """
         Resets module timing and applies the episode wind force.
 
@@ -57,6 +57,7 @@ class WindModule(SimModule):
         super().reset()
         if wind_force is not None:
             self.episode_wind_force[:] = np.asarray(wind_force, dtype=float)
-            print(f"Wind vector: {self.episode_wind_force}")
+            if verbose:
+                print(f"Wind vector: {self.episode_wind_force}")
         self.wind_state.force[:] = self.episode_wind_force
         self.wind_state.torque[:] = 0.0
