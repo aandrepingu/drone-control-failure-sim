@@ -126,16 +126,28 @@ class DroneEnv(gym.Env):
     def generate_init_config(self, options: dict | None = None) -> SimConfig:
         return SimConfig.sample(rng=self.np_random, options=options)
 
-    def __init__(self, render: bool | None, model, data, fault_prob=0.4):
+    def __init__(
+        self,
+        render: bool | None,
+        model,
+        data,
+        fault_prob=0.4,
+        substeps: int = 10,
+    ):
         super().__init__()
-        # Action: 4 motor thrusts
-        self.action_space = gym.spaces.Box(low=0, high=1, shape=(4,), dtype=np.float32)
+        # Action: 4 motor thrusts in [0.0, 7.0] N
+        self.action_space = gym.spaces.Box(
+            low=0.0, high=7.0, shape=(4,), dtype=np.float32
+        )
         # Observation: position + velocity + orientation + angular rates
         self.observation_space = gym.spaces.Box(
             low=-np.inf, high=np.inf, shape=(12,), dtype=np.float32
         )
 
         self.fault_prob = fault_prob
+        self.substeps = substeps
+        self.max_sim_time_ms = 10_000
+        self.sim_timestamp = 0
 
         # Load MuJoCo model
         self.mj_model = model
@@ -148,6 +160,12 @@ class DroneEnv(gym.Env):
         self.apply_init_config(self.generate_init_config())
 
         print("Gym env initialization complete")
+
+    def set_target(self, target_state: dict):
+        if "pos" in target_state and target_state["pos"] is not None:
+            self.state_board.control_targets.target_pos[:] = target_state["pos"]
+        if "yaw" in target_state and target_state["yaw"] is not None:
+            self.state_board.control_targets.target_attitude[2] = target_state["yaw"]
 
     def _setup_fault(self, options: dict | None = None):
         fault_index = -1
@@ -189,28 +207,70 @@ class DroneEnv(gym.Env):
             else:
                 module.reset()
 
+        if options and options.get("disable_wind", False):
+            self.wind_module.set_constant_wind(np.zeros(3))
+
+        if options and options.get("planar_init", False):
+            target_pos = self.state_board.control_targets.target_pos
+            pos_bound = options.get("pos_bound", 0.4)
+            vel_bound = options.get("vel_bound", 0.3)
+            pitch_bound = options.get("pitch_bound", 0.2)
+            pitch_rate_bound = options.get("pitch_rate_bound", 0.3)
+
+            x_init = float(target_pos[0] + self.np_random.uniform(-pos_bound, pos_bound))
+            y_init = float(target_pos[1])
+            z_init = float(target_pos[2] + self.np_random.uniform(-pos_bound, pos_bound))
+
+            vx = float(self.np_random.uniform(-vel_bound, vel_bound))
+            vy = 0.0
+            vz = float(self.np_random.uniform(-vel_bound, vel_bound))
+
+            theta = float(self.np_random.uniform(-pitch_bound, pitch_bound))
+            q_pitch = float(self.np_random.uniform(-pitch_rate_bound, pitch_rate_bound))
+
+            quat = np.array([np.cos(theta / 2.0), 0.0, np.sin(theta / 2.0), 0.0], dtype=float)
+
+            self.mj_data.qpos[0:3] = [x_init, y_init, z_init]
+            self.mj_data.qpos[3:7] = quat
+            self.mj_data.qvel[0:3] = [vx, vy, vz]
+            self.mj_data.qvel[3:6] = [0.0, q_pitch, 0.0]
+
+            mujoco.mj_forward(self.mj_model, self.mj_data)
+
+            # sync state board dynamics state
+            self.state_board.dynamics_state.position[:] = self.mj_data.qpos[0:3]
+            quat_wxyz = self.mj_data.qpos[3:7]
+            self.state_board.dynamics_state.quaternion[:] = quat_wxyz
+            quat_xyzw = np.array([quat_wxyz[1], quat_wxyz[2], quat_wxyz[3], quat_wxyz[0]])
+            self.state_board.dynamics_state.euler_angles[:] = R.from_quat(
+                quat_xyzw
+            ).as_euler("xyz")
+            self.state_board.dynamics_state.linear_velocity[:] = self.mj_data.qvel[0:3]
+            self.state_board.dynamics_state.angular_velocity[:] = self.mj_data.qvel[3:6]
+
         # evaluate initial sensor readings and return (obs, info)
         self.sensor_module.HandleDispatch(0)
 
-        return self._get_obs(), {}
+        return self._get_obs(), self._get_info()
 
     def step(self, action):
-        # apply thrusts from action
-        self.state_board.actuator_state.motor_thrusts[:] = action
-
-        self.sim_loop.step(self.sim_timestamp)
-        self.sim_timestamp += 2
+        self.state_board.actuator_state.motor_thrusts[:] = np.clip(action, 0.0, 7.0)
+        for _ in range(self.substeps):
+            if self.sim_loop.viewer and not self.sim_loop.viewer.is_running():
+                break
+            self.sim_loop.step(self.sim_timestamp)
+            self.sim_timestamp += 2
         obs = self._get_obs()
+        terminated = self._check_done()
         reward = self._compute_reward()
-        done = self._check_done()
-        return obs, reward, done, False, {}
+        truncated = self.sim_timestamp >= self.max_sim_time_ms
+        return obs, reward, terminated, truncated, self._get_info()
 
     def _get_obs(self):
         """
         State in the form of:
         [x, y, z, vx, vy, vz, roll, pitch, yaw, roll rate, pitch rate, yaw_rate]
         """
-        # placeholder
         sensors = self.state_board.sensor_data
 
         obs = np.concatenate(
@@ -224,12 +284,61 @@ class DroneEnv(gym.Env):
 
         return obs
 
-    def _compute_reward(self):
-        # Placeholder reward
-        return 0.0
+    def _is_crashed(self) -> bool:
+        dyn = self.state_board.dynamics_state
+        target = self.state_board.control_targets.target_pos
+        ex = dyn.position[0] - target[0]
+        ez = dyn.position[2] - target[2]
+        theta = dyn.euler_angles[1]
+        phi = dyn.euler_angles[0]
+        return bool(abs(ex) > 2.0 or abs(ez) > 2.0 or abs(theta) > 1.0 or abs(phi) > 1.0)
 
-    def _check_done(self):
-        # Placeholder termination condition
-        if self.sim_loop.viewer:
-            return not self.sim_loop.viewer.is_running()
-        return False
+    def _compute_reward(self) -> float:
+        dyn = self.state_board.dynamics_state
+        target = self.state_board.control_targets.target_pos
+        ex = dyn.position[0] - target[0]
+        ez = dyn.position[2] - target[2]
+        vx = dyn.linear_velocity[0]
+        vz = dyn.linear_velocity[2]
+        theta = dyn.euler_angles[1]
+        q = dyn.angular_velocity[1]
+
+        reward = 2.0 - (
+            2.5 * (ex ** 2)
+            + 4.0 * (ez ** 2)
+            + 0.3 * (vx ** 2)
+            + 0.5 * (vz ** 2)
+            + 2.0 * (theta ** 2)
+            + 0.1 * (q ** 2)
+        )
+
+        if abs(ex) < 0.1 and abs(ez) < 0.1 and abs(theta) < 0.1:
+            reward += 2.0
+
+        if self._is_crashed():
+            reward -= 50.0
+
+        return float(reward)
+
+    def _check_done(self) -> bool:
+        if self.sim_loop.viewer and not self.sim_loop.viewer.is_running():
+            return True
+        return self._is_crashed()
+
+    def _get_info(self) -> dict:
+        dyn = self.state_board.dynamics_state
+        target = self.state_board.control_targets.target_pos
+        ex = float(dyn.position[0] - target[0])
+        ez = float(dyn.position[2] - target[2])
+        return {
+            "pos": dyn.position.copy(),
+            "target_pos": target.copy(),
+            "ex": ex,
+            "ez": ez,
+            "dist": float(np.sqrt(ex**2 + ez**2)),
+        }
+
+    def close(self):
+        """Cleanly close MuJoCo viewer and release graphics resources."""
+        if hasattr(self, "sim_loop") and self.sim_loop is not None:
+            self.sim_loop.close()
